@@ -1394,6 +1394,17 @@ class _GameScreenState extends State<GameScreen> {
       }
     }
 
+    // Remove players deleted in the sheet (post-rename names not in finalOrder)
+    final removedNames = widget.players
+        .map((p) => p.name)
+        .where((n) => !finalOrder.contains(n))
+        .toList();
+    for (final name in removedNames) {
+      widget.players.removeWhere((p) => p.name == name);
+      _fields.remove(name)?.dispose();
+      _previousScores.remove(name);
+    }
+
     if (newPlayers.isNotEmpty) {
       int maxScore = 0;
       for (final p in widget.players) {
@@ -2551,20 +2562,33 @@ class _EditPlayersSheetState extends State<_EditPlayersSheet> {
       }
     }
 
-    final existingInOrder = _entries
+    final remainingOriginalNames = _entries
+        .where((e) => !e.isNew)
+        .map((e) => e.originalName!)
+        .toSet();
+    final hasDeleted =
+        widget.players.any((p) => !remainingOriginalNames.contains(p));
+    final deletedCount =
+        widget.players.where((p) => !remainingOriginalNames.contains(p)).length;
+
+    // Compare entry order against original order filtered to survivors
+    final survivorsInOriginalOrder = widget.players
+        .where((p) => remainingOriginalNames.contains(p))
+        .toList();
+    final existingInEntryOrder = _entries
         .where((e) => !e.isNew)
         .map((e) => e.originalName!)
         .toList();
     bool orderChanged = false;
-    for (int i = 0; i < existingInOrder.length; i++) {
-      if (i >= widget.players.length ||
-          existingInOrder[i] != widget.players[i]) {
+    for (int i = 0; i < existingInEntryOrder.length; i++) {
+      if (i >= survivorsInOriginalOrder.length ||
+          existingInEntryOrder[i] != survivorsInOriginalOrder[i]) {
         orderChanged = true;
         break;
       }
     }
 
-    if (renames.isEmpty && newPlayers.isEmpty && !orderChanged) {
+    if (renames.isEmpty && newPlayers.isEmpty && !orderChanged && !hasDeleted) {
       Navigator.pop(context);
       return;
     }
@@ -2575,6 +2599,7 @@ class _EditPlayersSheetState extends State<_EditPlayersSheet> {
     final msgs = <String>[];
     if (renames.isNotEmpty) msgs.add('تم تعديل ${renames.length} لاعب');
     if (newPlayers.isNotEmpty) msgs.add('تم إضافة ${newPlayers.length} لاعب جديد');
+    if (hasDeleted) msgs.add('تم حذف $deletedCount لاعب');
     if (orderChanged) msgs.add('تم تحديث الترتيب');
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -2735,6 +2760,30 @@ class _EditPlayersSheetState extends State<_EditPlayersSheet> {
                                       size: 18),
                                 ),
                               ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                  Icons.delete_outline_rounded,
+                                  color: AppColors.danger),
+                              onPressed: () {
+                                final remaining = _entries.length - 1;
+                                if (remaining < 2) {
+                                  HapticFeedback.heavyImpact();
+                                  ScaffoldMessenger.of(context)
+                                      .showSnackBar(const SnackBar(
+                                    content: Text(
+                                        'يجب أن يبقى لاعبان على الأقل'),
+                                    behavior:
+                                        SnackBarBehavior.floating,
+                                  ));
+                                  return;
+                                }
+                                HapticFeedback.lightImpact();
+                                setState(() {
+                                  entry.ctrl.dispose();
+                                  _entries.removeAt(i);
+                                });
+                              },
                             ),
                           ],
                         ),
