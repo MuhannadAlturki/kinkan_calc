@@ -1348,15 +1348,15 @@ class _GameScreenState extends State<GameScreen> {
       ),
       builder: (ctx) => _EditPlayersSheet(
         players: widget.players.map((p) => p.name).toList(),
-        onSave: (renames, newPlayers) {
-          _applyPlayerEdits(renames, newPlayers);
+        onSave: (renames, newPlayers, finalOrder) {
+          _applyPlayerEdits(renames, newPlayers, finalOrder);
         },
       ),
     );
   }
 
   void _applyPlayerEdits(
-      Map<String, String> renames, List<String> newPlayers) {
+      Map<String, String> renames, List<String> newPlayers, List<String> finalOrder) {
     HapticFeedback.mediumImpact();
 
     if (renames.isNotEmpty) {
@@ -1417,6 +1417,23 @@ class _GameScreenState extends State<GameScreen> {
         addedPlayers: List.from(newPlayers),
       );
       _history.add(additionEntry);
+    }
+
+    // Reorder widget.players to match the order the user set in the sheet.
+    // finalOrder contains new names (post-rename) for existing players + new players.
+    if (finalOrder.isNotEmpty) {
+      final nameToPlayer = <String, Player>{
+        for (final p in widget.players) p.name: p
+      };
+      final reordered = finalOrder
+          .map((n) => nameToPlayer[n])
+          .whereType<Player>()
+          .toList();
+      if (reordered.length == widget.players.length) {
+        widget.players
+          ..clear()
+          ..addAll(reordered);
+      }
     }
 
     setState(() {
@@ -2447,6 +2464,13 @@ class _GameSettingsSheetState extends State<_GameSettingsSheet> {
 }
 
 /*═══════════════════════════│ ورقة تعديل اللاعبين │═══════════════════════════*/
+class _PlayerEntry {
+  _PlayerEntry({required this.ctrl, this.originalName});
+  final TextEditingController ctrl;
+  final String? originalName;
+  bool get isNew => originalName == null;
+}
+
 class _EditPlayersSheet extends StatefulWidget {
   const _EditPlayersSheet({
     required this.players,
@@ -2454,33 +2478,35 @@ class _EditPlayersSheet extends StatefulWidget {
   });
 
   final List<String> players;
-  final void Function(Map<String, String> renames, List<String> newPlayers)
-  onSave;
+  final void Function(
+    Map<String, String> renames,
+    List<String> newPlayers,
+    List<String> finalOrder,
+  ) onSave;
 
   @override
   State<_EditPlayersSheet> createState() => _EditPlayersSheetState();
 }
 
 class _EditPlayersSheetState extends State<_EditPlayersSheet> {
-  late List<TextEditingController> _existingCtrls;
-  final List<TextEditingController> _newCtrls = [];
+  late List<_PlayerEntry> _entries;
   final _newNameCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _existingCtrls = widget.players
-        .map((n) => TextEditingController(text: n))
+    _entries = widget.players
+        .map((n) => _PlayerEntry(
+              ctrl: TextEditingController(text: n),
+              originalName: n,
+            ))
         .toList();
   }
 
   @override
   void dispose() {
-    for (final c in _existingCtrls) {
-      c.dispose();
-    }
-    for (final c in _newCtrls) {
-      c.dispose();
+    for (final e in _entries) {
+      e.ctrl.dispose();
     }
     _newNameCtrl.dispose();
     super.dispose();
@@ -2490,9 +2516,8 @@ class _EditPlayersSheetState extends State<_EditPlayersSheet> {
     final name = _newNameCtrl.text.trim();
     if (name.isEmpty) return;
 
-    final allCurrent = _existingCtrls.map((c) => c.text.trim()).toList();
-    final allNew = _newCtrls.map((c) => c.text.trim()).toList();
-    if (allCurrent.contains(name) || allNew.contains(name)) {
+    final allCurrent = _entries.map((e) => e.ctrl.text.trim()).toList();
+    if (allCurrent.contains(name)) {
       HapticFeedback.heavyImpact();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -2505,44 +2530,56 @@ class _EditPlayersSheetState extends State<_EditPlayersSheet> {
 
     HapticFeedback.lightImpact();
     setState(() {
-      _newCtrls.add(TextEditingController(text: name));
+      _entries.add(_PlayerEntry(ctrl: TextEditingController(text: name)));
       _newNameCtrl.clear();
     });
   }
 
   void _save() {
     final Map<String, String> renames = {};
-    for (int i = 0; i < widget.players.length; i++) {
-      final oldName = widget.players[i];
-      final newName = _existingCtrls[i].text.trim();
-      if (newName.isEmpty) continue;
-      if (oldName != newName) renames[oldName] = newName;
+    final List<String> newPlayers = [];
+    final List<String> finalOrder = [];
+
+    for (final entry in _entries) {
+      final name = entry.ctrl.text.trim();
+      if (name.isEmpty) continue;
+      finalOrder.add(name);
+      if (entry.isNew) {
+        newPlayers.add(name);
+      } else if (entry.originalName != name) {
+        renames[entry.originalName!] = name;
+      }
     }
 
-    final newPlayers = _newCtrls
-        .map((c) => c.text.trim())
-        .where((n) => n.isNotEmpty)
+    final existingInOrder = _entries
+        .where((e) => !e.isNew)
+        .map((e) => e.originalName!)
         .toList();
+    bool orderChanged = false;
+    for (int i = 0; i < existingInOrder.length; i++) {
+      if (i >= widget.players.length ||
+          existingInOrder[i] != widget.players[i]) {
+        orderChanged = true;
+        break;
+      }
+    }
 
-    if (renames.isEmpty && newPlayers.isEmpty) {
+    if (renames.isEmpty && newPlayers.isEmpty && !orderChanged) {
       Navigator.pop(context);
       return;
     }
 
-    widget.onSave(renames, newPlayers);
+    widget.onSave(renames, newPlayers, finalOrder);
     Navigator.pop(context);
 
-    final messages = <String>[];
-    if (renames.isNotEmpty) {
-      messages.add('تم تعديل ${renames.length} لاعب');
-    }
-    if (newPlayers.isNotEmpty) {
-      messages.add('تم إضافة ${newPlayers.length} لاعب جديد');
-    }
+    final msgs = <String>[];
+    if (renames.isNotEmpty) msgs.add('تم تعديل ${renames.length} لاعب');
+    if (newPlayers.isNotEmpty) msgs.add('تم إضافة ${newPlayers.length} لاعب جديد');
+    if (orderChanged) msgs.add('تم تحديث الترتيب');
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('✅ ${messages.join(" • ")}'),
+        content: Text('✅ ${msgs.join(" • ")}'),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -2584,39 +2621,126 @@ class _EditPlayersSheetState extends State<_EditPlayersSheet> {
                         fontSize: 20, fontWeight: FontWeight.bold)),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
+            Text(
+              'اسحب ↕ لتغيير الترتيب — يؤثر على تحديد الساكتين',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 12),
             Expanded(
               child: ListView(
                 controller: scrollCtrl,
                 children: [
-                  const Text('اللاعبون الحاليون',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 8),
-                  ...List.generate(widget.players.length, (i) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          PlayerAvatar(
-                              name: widget.players[i],
-                              allPlayers: widget.players),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              controller: _existingCtrls[i],
-                              decoration: InputDecoration(
-                                hintText: widget.players[i],
-                                prefixIcon: const Icon(
-                                    Icons.edit_rounded,
-                                    size: 18),
-                              ),
+                  ReorderableListView(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    onReorder: (oldIndex, newIndex) {
+                      setState(() {
+                        if (newIndex > oldIndex) newIndex--;
+                        final item = _entries.removeAt(oldIndex);
+                        _entries.insert(newIndex, item);
+                      });
+                    },
+                    children: List.generate(_entries.length, (i) {
+                      final entry = _entries[i];
+                      final allNames =
+                          _entries.map((e) => e.ctrl.text).toList();
+
+                      if (entry.isNew) {
+                        return Container(
+                          key: ObjectKey(entry.ctrl),
+                          margin:
+                              const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.success
+                                .withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: AppColors.success
+                                  .withValues(alpha: 0.3),
                             ),
                           ),
-                        ],
-                      ),
-                    );
-                  }),
+                          child: Row(
+                            children: [
+                              ReorderableDragStartListener(
+                                index: i,
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 8),
+                                  child: Icon(
+                                      Icons.drag_handle_rounded,
+                                      color: Colors.grey),
+                                ),
+                              ),
+                              const Icon(Icons.person_rounded,
+                                  color: AppColors.success),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: entry.ctrl,
+                                  decoration: const InputDecoration(
+                                    border: InputBorder.none,
+                                    fillColor: Colors.transparent,
+                                    filled: false,
+                                  ),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded,
+                                    color: AppColors.danger),
+                                onPressed: () {
+                                  HapticFeedback.lightImpact();
+                                  setState(() {
+                                    entry.ctrl.dispose();
+                                    _entries.removeAt(i);
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      return Padding(
+                        key: ObjectKey(entry.ctrl),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 4),
+                        child: Row(
+                          children: [
+                            ReorderableDragStartListener(
+                              index: i,
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 8),
+                                child: Icon(
+                                    Icons.drag_handle_rounded,
+                                    color: Colors.grey),
+                              ),
+                            ),
+                            PlayerAvatar(
+                                name: entry.ctrl.text,
+                                allPlayers: allNames),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: TextField(
+                                controller: entry.ctrl,
+                                decoration: InputDecoration(
+                                  hintText: entry.originalName,
+                                  prefixIcon: const Icon(
+                                      Icons.edit_rounded,
+                                      size: 18),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
                   const SizedBox(height: 20),
                   const Divider(),
                   const SizedBox(height: 12),
@@ -2647,7 +2771,7 @@ class _EditPlayersSheetState extends State<_EditPlayersSheet> {
                           decoration: const InputDecoration(
                             hintText: 'اسم اللاعب الجديد',
                             prefixIcon:
-                            Icon(Icons.person_add_alt_rounded),
+                                Icon(Icons.person_add_alt_rounded),
                           ),
                           onSubmitted: (_) => _addNew(),
                         ),
@@ -2667,54 +2791,6 @@ class _EditPlayersSheetState extends State<_EditPlayersSheet> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  ...List.generate(_newCtrls.length, (i) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color:
-                          AppColors.success.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: AppColors.success
-                                .withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.person_rounded,
-                                color: AppColors.success),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextField(
-                                controller: _newCtrls[i],
-                                decoration: const InputDecoration(
-                                  border: InputBorder.none,
-                                  fillColor: Colors.transparent,
-                                  filled: false,
-                                ),
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close_rounded,
-                                  color: AppColors.danger),
-                              onPressed: () {
-                                HapticFeedback.lightImpact();
-                                setState(() {
-                                  _newCtrls[i].dispose();
-                                  _newCtrls.removeAt(i);
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
                 ],
               ),
             ),
