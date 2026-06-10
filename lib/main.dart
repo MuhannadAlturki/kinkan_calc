@@ -145,6 +145,8 @@ class Round {
     required this.points,
     this.isPlayerAddition = false,
     this.addedPlayers = const [],
+    this.isPlayerRemoval = false,
+    this.removedPlayers = const [],
   });
 
   final int index;
@@ -153,6 +155,10 @@ class Round {
   Map<String, int> points;
   final bool isPlayerAddition;
   final List<String> addedPlayers;
+  final bool isPlayerRemoval;
+  final List<String> removedPlayers;
+
+  bool get isEvent => isPlayerAddition || isPlayerRemoval;
 
   Map<String, dynamic> toJson() => {
     'index': index,
@@ -161,6 +167,8 @@ class Round {
     'points': points,
     'isPlayerAddition': isPlayerAddition,
     'addedPlayers': addedPlayers,
+    'isPlayerRemoval': isPlayerRemoval,
+    'removedPlayers': removedPlayers,
   };
 
   factory Round.fromJson(Map<String, dynamic> j) => Round(
@@ -170,6 +178,8 @@ class Round {
     points: Map<String, int>.from(j['points']),
     isPlayerAddition: j['isPlayerAddition'] ?? false,
     addedPlayers: List<String>.from(j['addedPlayers'] ?? []),
+    isPlayerRemoval: j['isPlayerRemoval'] ?? false,
+    removedPlayers: List<String>.from(j['removedPlayers'] ?? []),
   );
 }
 
@@ -729,7 +739,7 @@ class _GameScreenState extends State<GameScreen> {
       widget.players.map((p) => p.name).toList();
 
   int get _realRoundsCount =>
-      _history.where((r) => !r.isPlayerAddition).length;
+      _history.where((r) => !r.isEvent).length;
 
   @override
   void initState() {
@@ -843,8 +853,7 @@ class _GameScreenState extends State<GameScreen> {
         p.out = p.score >= _limit;
       }
 
-      // تجاهل صفوف "إضافة لاعبين" من حساب الأدوار
-      if (r.isPlayerAddition) continue;
+      if (r.isEvent) continue;
 
       final roles = _computeRoles(
         activePlayers: widget.players.where((p) => !p.out).toList(),
@@ -856,7 +865,7 @@ class _GameScreenState extends State<GameScreen> {
       stepWinners = roles.winners;
     }
 
-    if (_history.where((r) => !r.isPlayerAddition).isEmpty) {
+    if (_history.where((r) => !r.isEvent).isEmpty) {
       final roles = _computeRoles(
         activePlayers: widget.players.where((p) => !p.out).toList(),
         previousSilent: [],
@@ -1133,6 +1142,12 @@ class _GameScreenState extends State<GameScreen> {
           for (final n in last.addedPlayers) {
             _fields.remove(n);
           }
+        } else if (last.isPlayerRemoval) {
+          for (final n in last.removedPlayers) {
+            widget.players.add(Player(n));
+            _fields[n] = TextEditingController(text: '0');
+            _previousScores[n] = 0;
+          }
         }
         _roundNo = _realRoundsCount + 1;
         _recalcTotals();
@@ -1399,10 +1414,20 @@ class _GameScreenState extends State<GameScreen> {
         .map((p) => p.name)
         .where((n) => !finalOrder.contains(n))
         .toList();
-    for (final name in removedNames) {
-      widget.players.removeWhere((p) => p.name == name);
-      _fields.remove(name)?.dispose();
-      _previousScores.remove(name);
+    if (removedNames.isNotEmpty) {
+      for (final name in removedNames) {
+        widget.players.removeWhere((p) => p.name == name);
+        _fields.remove(name)?.dispose();
+        _previousScores.remove(name);
+      }
+      _history.add(Round(
+        index: _realRoundsCount,
+        preset: 0,
+        winner: '',
+        points: const {},
+        isPlayerRemoval: true,
+        removedPlayers: List.from(removedNames),
+      ));
     }
 
     if (newPlayers.isNotEmpty) {
@@ -1410,7 +1435,7 @@ class _GameScreenState extends State<GameScreen> {
       for (final p in widget.players) {
         if (p.score > maxScore) maxScore = p.score;
       }
-      final startingScore = maxScore + 1;
+      final startingScore = maxScore > 0 ? maxScore + 1 : 0;
 
       for (final name in newPlayers) {
         widget.players.add(Player(name));
@@ -2063,8 +2088,7 @@ class RoundsHistoryScreen extends StatelessWidget {
     }
 
     final reversed = history.reversed.toList();
-    final realRoundsCount =
-        history.where((r) => !r.isPlayerAddition).length;
+    final realRoundsCount = history.where((r) => !r.isEvent).length;
 
     return Scaffold(
       appBar: AppBar(
@@ -2077,6 +2101,9 @@ class RoundsHistoryScreen extends StatelessWidget {
           final r = reversed[i];
           if (r.isPlayerAddition) {
             return _PlayerAdditionCard(round: r, allPlayers: allPlayers);
+          }
+          if (r.isPlayerRemoval) {
+            return _PlayerRemovalCard(round: r);
           }
           return _RoundDetailCard(
             round: r,
@@ -2331,6 +2358,88 @@ class _PlayerAdditionCard extends StatelessWidget {
                 ),
               );
             }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/*═══════════════════════════│ كرت حذف لاعبين │═══════════════════════════*/
+class _PlayerRemovalCard extends StatelessWidget {
+  const _PlayerRemovalCard({required this.round});
+  final Round round;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      color: AppColors.danger.withValues(alpha: 0.05),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: AppColors.danger.withValues(alpha: 0.3),
+          width: 1.2,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.person_remove_rounded,
+                      color: AppColors.danger, size: 18),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'حذف لاعبين',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: AppColors.danger),
+                ),
+              ],
+            ),
+            const Divider(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: round.removedPlayers
+                  .map((name) => Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppColors.danger.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: AppColors.danger.withValues(alpha: 0.3)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.person_off_rounded,
+                                size: 14, color: AppColors.danger),
+                            const SizedBox(width: 5),
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: AppColors.danger),
+                            ),
+                          ],
+                        ),
+                      ))
+                  .toList(),
+            ),
           ],
         ),
       ),
@@ -2899,7 +3008,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ..writeln('━━━━━━━━━━━━━━━━━━')
       ..writeln('🏆 الفائزون: ${g.winners.join("، ")}')
       ..writeln('🎯 حد الخسارة: ${g.limit}')
-      ..writeln('📊 عدد الجولات: ${g.rounds.where((r) => !r.isPlayerAddition).length}')
+      ..writeln('📊 عدد الجولات: ${g.rounds.where((r) => !r.isEvent).length}')
       ..writeln('')
       ..writeln('النقاط النهائية:');
     for (final e in g.finalScores.entries) {
@@ -3047,7 +3156,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final timeStr =
         '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
     final realRoundsCount =
-        g.rounds.where((r) => !r.isPlayerAddition).length;
+        g.rounds.where((r) => !r.isEvent).length;
 
     return Dismissible(
       key: Key(g.id),
@@ -3839,6 +3948,9 @@ class GameDetailScreen extends StatelessWidget {
                     ),
                   ),
                 );
+              }
+              if (r.isPlayerRemoval) {
+                return _PlayerRemovalCard(round: r);
               }
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
