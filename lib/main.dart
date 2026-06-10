@@ -3031,40 +3031,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 builder: (_) => const TopWinnersScreen()),
           ),
         ),
-        IconButton(
-          tooltip: 'مسح الكل',
-          icon: const Icon(Icons.delete_forever_rounded),
-          onPressed: () async {
-            final ok = await showDialog<bool>(
-              context: context,
-              builder: (_) => AlertDialog(
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20)),
-                title: const Text('مسح السجل؟'),
-                content: const Text(
-                    'سيتم حذف جميع الألعاب السابقة، هل أنت متأكد؟'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('إلغاء'),
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.danger,
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('نعم'),
-                  ),
-                ],
-              ),
-            );
-            if (ok == true) {
-              await SavedGames.clear();
-              _refresh();
-            }
-          },
-        ),
       ],
     ),
     body: Column(
@@ -3408,13 +3374,6 @@ class _TopWinnersScreenState extends State<TopWinnersScreen>
           Tab(icon: Icon(Icons.pie_chart_rounded), text: 'الرسم البياني'),
         ],
       ),
-      actions: [
-        IconButton(
-          tooltip: 'إعادة تعيين',
-          icon: const Icon(Icons.replay_rounded),
-          onPressed: _resetStats,
-        ),
-      ],
     ),
     body: FutureBuilder<_StatsData>(
       future: _future,
