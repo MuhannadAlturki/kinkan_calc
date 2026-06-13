@@ -3337,23 +3337,9 @@ class _TopWinnersScreenState extends State<TopWinnersScreen>
         wins[w] = (wins[w] ?? 0) + 1;
       }
 
-      // حساب متوسط النقاط مع استبعاد النقاط الشاذة
-      final scoresUnderLimit = g.finalScores.values
-          .where((s) => s < g.limit)
-          .toList();
-      final double? othersAvg = scoresUnderLimit.isEmpty
-          ? null
-          : scoresUnderLimit.reduce((a, b) => a + b) / scoresUnderLimit.length;
-
       for (final entry in g.finalScores.entries) {
-        final score = entry.value;
-        // استبعاد: تجاوز الحد، أو أعلى بمرتين من متوسط الباقين وأعلى من 30
-        final isOutlier = score >= g.limit ||
-            (othersAvg != null && score > othersAvg * 2 && score > 30);
-        if (!isOutlier) {
-          validScores[entry.key] ??= [];
-          validScores[entry.key]!.add(score);
-        }
+        validScores[entry.key] ??= [];
+        validScores[entry.key]!.add(entry.value);
       }
     }
 
