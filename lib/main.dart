@@ -3307,18 +3307,61 @@ class _TopWinnersScreenState extends State<TopWinnersScreen>
 
     final Map<String, int> wins = {};
     final Map<String, int> gamesPlayed = {};
+    final Map<String, List<int>> validScores = {};
+    final Map<String, int> currentStreak = {};
+    final Map<String, int> longestStreak = {};
     int totalGames = 0;
 
-    for (final g in games) {
-      if (resetDate != null && g.date.isBefore(resetDate)) continue;
+    final filteredGames = games
+        .where((g) => resetDate == null || !g.date.isBefore(resetDate))
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+
+    for (final g in filteredGames) {
       totalGames++;
+      final winners = g.winners.toSet();
+
       for (final p in g.players) {
         gamesPlayed[p] = (gamesPlayed[p] ?? 0) + 1;
+        if (winners.contains(p)) {
+          currentStreak[p] = (currentStreak[p] ?? 0) + 1;
+          if ((currentStreak[p] ?? 0) > (longestStreak[p] ?? 0)) {
+            longestStreak[p] = currentStreak[p]!;
+          }
+        } else {
+          currentStreak[p] = 0;
+        }
       }
-      for (final w in g.winners) {
+
+      for (final w in winners) {
         wins[w] = (wins[w] ?? 0) + 1;
       }
+
+      // حساب متوسط النقاط مع استبعاد النقاط الشاذة
+      final scoresUnderLimit = g.finalScores.values
+          .where((s) => s < g.limit)
+          .toList();
+      final double? othersAvg = scoresUnderLimit.isEmpty
+          ? null
+          : scoresUnderLimit.reduce((a, b) => a + b) / scoresUnderLimit.length;
+
+      for (final entry in g.finalScores.entries) {
+        final score = entry.value;
+        // استبعاد: تجاوز الحد، أو أعلى بمرتين من متوسط الباقين وأعلى من 30
+        final isOutlier = score >= g.limit ||
+            (othersAvg != null && score > othersAvg * 2 && score > 30);
+        if (!isOutlier) {
+          validScores[entry.key] ??= [];
+          validScores[entry.key]!.add(score);
+        }
+      }
     }
+
+    final Map<String, double> avgScore = {
+      for (final e in validScores.entries)
+        if (e.value.isNotEmpty)
+          e.key: e.value.reduce((a, b) => a + b) / e.value.length,
+    };
 
     final sorted = wins.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -3327,6 +3370,8 @@ class _TopWinnersScreenState extends State<TopWinnersScreen>
       wins: {for (final e in sorted) e.key: e.value},
       gamesPlayed: gamesPlayed,
       totalGames: totalGames,
+      avgScore: avgScore,
+      longestStreak: longestStreak,
     );
   }
 
@@ -3479,6 +3524,32 @@ class _TopWinnersScreenState extends State<TopWinnersScreen>
                         '$played مباراة • $winRate% فوز',
                         style: TextStyle(
                             fontSize: 12, color: Colors.grey.shade600),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          if (stats.avgScore[entry.key] != null) ...[
+                            Icon(Icons.analytics_rounded,
+                                size: 11, color: Colors.grey.shade500),
+                            const SizedBox(width: 2),
+                            Text(
+                              'متوسط ${stats.avgScore[entry.key]!.toStringAsFixed(0)} نقطة',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey.shade500),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          if ((stats.longestStreak[entry.key] ?? 0) >= 2) ...[
+                            Icon(Icons.local_fire_department_rounded,
+                                size: 11, color: AppColors.warning),
+                            const SizedBox(width: 2),
+                            Text(
+                              'سلسلة ${stats.longestStreak[entry.key]} فوز',
+                              style: TextStyle(
+                                  fontSize: 11, color: AppColors.warning),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
@@ -3652,10 +3723,14 @@ class _StatsData {
     required this.wins,
     required this.gamesPlayed,
     required this.totalGames,
+    required this.avgScore,
+    required this.longestStreak,
   });
   final Map<String, int> wins;
   final Map<String, int> gamesPlayed;
   final int totalGames;
+  final Map<String, double> avgScore;
+  final Map<String, int> longestStreak;
 }
 
 /*═══════════════════════════│ تفاصيل لعبة محفوظة │═══════════════════════════*/
