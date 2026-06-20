@@ -18,6 +18,7 @@ dependencies:
   uuid: ^4.3.3   # ← لتوليد مُعرّف كل لعبة
   fl_chart: ^0.68.0       # ← للرسوم البيانية في الإحصائيات
   share_plus: ^9.0.0      # ← لمشاركة نتائج الألعاب
+  file_picker: ^8.0.7     # ← لاستيراد ملفات البيانات
 
 dev_dependencies:
   flutter_test:

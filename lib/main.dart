@@ -6,8 +6,10 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:confetti/confetti.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -316,6 +318,72 @@ class StatsManager {
   }
 }
 
+class AppSettings {
+  static const _defaults = {
+    'khalasOthers': 100, 'khalasWinner': 0,
+    'dablOthers': 200,   'dablWinner': 0,
+    'dablLonOthers': 400,'dablLonWinner': 0,
+  };
+
+  static Future<Map<String, int>> load() async {
+    final p = await SharedPreferences.getInstance();
+    return {for (final e in _defaults.entries) e.key: p.getInt(e.key) ?? e.value};
+  }
+
+  static Future<void> save(Map<String, int> s) async {
+    final p = await SharedPreferences.getInstance();
+    for (final e in s.entries) await p.setInt(e.key, e.value);
+  }
+
+  static int othersValue(int preset, Map<String, int> s) {
+    if (preset == 100) return s['khalasOthers']!;
+    if (preset == 200) return s['dablOthers']!;
+    if (preset == 400) return s['dablLonOthers']!;
+    return 0;
+  }
+
+  static int winnerValue(int preset, Map<String, int> s) {
+    if (preset == 100) return s['khalasWinner']!;
+    if (preset == 200) return s['dablWinner']!;
+    if (preset == 400) return s['dablLonWinner']!;
+    return 0;
+  }
+}
+
+class PlayerGroup {
+  PlayerGroup({required this.name, required this.players});
+  final String name;
+  final List<String> players;
+  Map<String, dynamic> toJson() => {'name': name, 'players': players};
+  factory PlayerGroup.fromJson(Map<String, dynamic> j) =>
+      PlayerGroup(name: j['name'], players: List<String>.from(j['players']));
+}
+
+class SavedGroups {
+  static const _key = 'saved_groups';
+  static Future<List<PlayerGroup>> load() async {
+    final p = await SharedPreferences.getInstance();
+    return (p.getStringList(_key) ?? [])
+        .map((s) => PlayerGroup.fromJson(jsonDecode(s)))
+        .toList();
+  }
+  static Future<void> _save(List<PlayerGroup> groups) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList(_key, groups.map((g) => jsonEncode(g.toJson())).toList());
+  }
+  static Future<void> add(PlayerGroup group) async {
+    final groups = await load();
+    groups.removeWhere((g) => g.name == group.name);
+    groups.add(group);
+    await _save(groups);
+  }
+  static Future<void> remove(String name) async {
+    final groups = await load();
+    groups.removeWhere((g) => g.name == name);
+    await _save(groups);
+  }
+}
+
 /*═══════════════════════════│ Widgets مشتركة │═══════════════════════════*/
 class PlayerAvatar extends StatelessWidget {
   const PlayerAvatar({
@@ -381,11 +449,49 @@ class _PlayerSetupScreenState extends State<PlayerSetupScreen> {
   final _limitCtrl = TextEditingController(text: '2000');
   final List<Player> _players = [];
   List<String> _savedNames = [];
+  List<PlayerGroup> _groups = [];
 
   @override
   void initState() {
     super.initState();
     SavedNames.load().then((v) => setState(() => _savedNames = v));
+    SavedGroups.load().then((v) => setState(() => _groups = v));
+  }
+
+  Future<void> _saveGroup() async {
+    if (_players.length < 2) return;
+    final ctrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('حفظ المجموعة'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'اسم المجموعة'),
+          onSubmitted: (v) => Navigator.pop(context, v),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('حفظ')),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+    final group = PlayerGroup(name: name, players: _players.map((p) => p.name).toList());
+    await SavedGroups.add(group);
+    final groups = await SavedGroups.load();
+    setState(() => _groups = groups);
+  }
+
+  void _loadGroup(PlayerGroup group) {
+    setState(() {
+      _players.clear();
+      for (final name in group.players) {
+        _players.add(Player(name));
+      }
+    });
   }
 
   void _addPlayer(String name) {
@@ -436,18 +542,22 @@ class _PlayerSetupScreenState extends State<PlayerSetupScreen> {
         title: const Text('حاسبة كنكان'),
         actions: [
           IconButton(
-            tooltip: 'تغيير المظهر',
-            icon: Icon(
-                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
-            onPressed: _toggleTheme,
-          ),
-          IconButton(
             tooltip: 'السجل',
             icon: const Icon(Icons.history_rounded),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const HistoryScreen()),
             ),
+          ),
+          IconButton(
+            tooltip: 'الإعدادات',
+            icon: const Icon(Icons.settings_rounded),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
           ),
           const SizedBox(width: 4),
         ],
@@ -584,6 +694,35 @@ class _PlayerSetupScreenState extends State<PlayerSetupScreen> {
                   ),
                 ),
               ],
+              if (_groups.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Icon(Icons.group_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Text('المجموعات المحفوظة', style: Theme.of(context).textTheme.titleSmall),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 40,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: _groups.map((g) => Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: InputChip(
+                        avatar: const Icon(Icons.group_rounded, size: 16),
+                        label: Text(g.name),
+                        onPressed: () => _loadGroup(g),
+                        onDeleted: () async {
+                          await SavedGroups.remove(g.name);
+                          setState(() => _groups.remove(g));
+                        },
+                      ),
+                    )).toList(),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Expanded(
                 child: _players.isEmpty
@@ -645,6 +784,18 @@ class _PlayerSetupScreenState extends State<PlayerSetupScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              if (_players.length >= 2)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: OutlinedButton.icon(
+                    onPressed: _saveGroup,
+                    icon: const Icon(Icons.group_add_rounded),
+                    label: const Text('حفظ المجموعة'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                  ),
+                ),
               ElevatedButton.icon(
                 onPressed: _players.length < 2 ? null : _start,
                 style: ElevatedButton.styleFrom(
@@ -721,6 +872,11 @@ class _GameScreenState extends State<GameScreen> {
   int _roundNo = 1;
   Set<String> _winners = {};
   int _preset = 0;
+  Map<String, int> _settings = {
+    'khalasOthers': 100, 'khalasWinner': 0,
+    'dablOthers': 200,   'dablWinner': 0,
+    'dablLonOthers': 400,'dablLonWinner': 0,
+  };
 
   final Map<String, TextEditingController> _fields = {};
   final Map<String, int> _previousScores = {};
@@ -757,6 +913,8 @@ class _GameScreenState extends State<GameScreen> {
     }
     _roundNo = _realRoundsCount + 1;
 
+    AppSettings.load().then((s) => setState(() => _settings = s));
+
     _refreshDefaultPoints();
     _recalcTotals(isInit: true);
 
@@ -788,7 +946,14 @@ class _GameScreenState extends State<GameScreen> {
   void _refreshDefaultPoints() {
     for (final p in _active) {
       final ctrl = _fields[p.name]!;
-      ctrl.text = _winners.contains(p.name) ? '0' : '$_preset';
+      if (_preset == 0) {
+        ctrl.text = '0';
+      } else if (_winners.contains(p.name)) {
+        final w = AppSettings.winnerValue(_preset, _settings);
+        ctrl.text = w > 0 ? '-$w' : '0';
+      } else {
+        ctrl.text = '${AppSettings.othersValue(_preset, _settings)}';
+      }
     }
     setState(() {});
   }
@@ -1319,7 +1484,7 @@ class _GameScreenState extends State<GameScreen> {
   String _getPresetName(int p) {
     if (p == 400) return 'دبل لون';
     if (p == 200) return 'دبل';
-    if (p == 100) return 'عادي';
+    if (p == 100) return 'خالص';
     return 'صفر';
   }
 
@@ -1673,9 +1838,12 @@ class _GameScreenState extends State<GameScreen> {
 
   Widget _buildPresetSelector() {
     final presets = [
-      {'value': 100, 'label': 'عادي', 'icon': Icons.looks_one_rounded},
-      {'value': 200, 'label': 'دبل', 'icon': Icons.looks_two_rounded},
-      {'value': 400, 'label': 'دبل لون', 'icon': Icons.palette_rounded},
+      {'value': 100, 'label': 'خالص', 'icon': Icons.looks_one_rounded,
+       'display': _settings['khalasOthers']},
+      {'value': 200, 'label': 'دبل', 'icon': Icons.looks_two_rounded,
+       'display': _settings['dablOthers']},
+      {'value': 400, 'label': 'دبل لون', 'icon': Icons.palette_rounded,
+       'display': _settings['dablLonOthers']},
     ];
 
     return Row(
@@ -1736,7 +1904,7 @@ class _GameScreenState extends State<GameScreen> {
                       ),
                     ),
                     Text(
-                      '${p['value']}',
+                      '${p['display']}',
                       style: TextStyle(
                         color: isSelected
                             ? Colors.white.withValues(alpha: 0.8)
@@ -3276,6 +3444,205 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
+/*═══════════════════════════│ الإعدادات │═══════════════════════════*/
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  Map<String, int> _settings = {};
+  bool _loading = true;
+
+  final _keys = [
+    ('khalasOthers', 'يُضاف للباقين — خالص'),
+    ('khalasWinner', 'يُنقص من المخلص'),
+    ('dablOthers', 'يُضاف للباقين — دبل'),
+    ('dablWinner', 'يُنقص من المدبل'),
+    ('dablLonOthers', 'يُضاف للباقين — دبل لون'),
+    ('dablLonWinner', 'يُنقص من مدبل اللون'),
+  ];
+
+  late final Map<String, TextEditingController> _ctrls;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrls = {for (final k in _keys) k.$1: TextEditingController()};
+    AppSettings.load().then((s) {
+      setState(() {
+        _settings = s;
+        _loading = false;
+        for (final k in _keys) _ctrls[k.$1]!.text = '${s[k.$1]}';
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final c in _ctrls.values) c.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final updated = <String, int>{};
+    for (final k in _keys) {
+      updated[k.$1] = int.tryParse(_ctrls[k.$1]!.text) ?? _settings[k.$1]!;
+    }
+    await AppSettings.save(updated);
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _exportData() async {
+    final games = await SavedGames.load();
+    final json = jsonEncode(games.map((g) => g.toJson()).toList());
+    await Share.share(json, subject: 'بيانات حاسبة كنكان');
+  }
+
+  Future<void> _importData() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      if (result == null || result.files.single.path == null) return;
+      final content = await File(result.files.single.path!).readAsString();
+      final List<dynamic> list = jsonDecode(content);
+      final games = list.map((e) => GameRecord.fromJson(e)).toList();
+      final existing = await SavedGames.load();
+      final existingIds = existing.map((g) => g.id).toSet();
+      int added = 0;
+      for (final g in games) {
+        if (!existingIds.contains(g.id)) {
+          await SavedGames.add(g);
+          added++;
+        }
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تم استيراد $added لعبة')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('حدث خطأ أثناء الاستيراد')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('الإعدادات'),
+        actions: [
+          TextButton(onPressed: _loading ? null : _save, child: const Text('حفظ')),
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // المظهر
+                Card(
+                  child: ListTile(
+                    leading: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
+                    title: const Text('المظهر'),
+                    subtitle: Text(isDark ? 'داكن' : 'فاتح'),
+                    trailing: Switch(
+                      value: isDark,
+                      onChanged: (_) {
+                        final newMode = isDark ? ThemeMode.light : ThemeMode.dark;
+                        KinkanApp.themeNotifier.value = newMode;
+                        ThemeManager.save(newMode);
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                // قيم الأنواع
+                Text('قيم الأنواع', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 4),
+                Text('القيم تُطبَّق على كل لعبة جديدة',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                const SizedBox(height: 12),
+                ..._buildPresetSection('خالص', ['khalasOthers', 'khalasWinner']),
+                const SizedBox(height: 8),
+                ..._buildPresetSection('دبل', ['dablOthers', 'dablWinner']),
+                const SizedBox(height: 8),
+                ..._buildPresetSection('دبل لون', ['dablLonOthers', 'dablLonWinner']),
+                const SizedBox(height: 24),
+                // تصدير واستيراد
+                Text('البيانات', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _exportData,
+                  icon: const Icon(Icons.upload_rounded),
+                  label: const Text('تصدير البيانات'),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _importData,
+                  icon: const Icon(Icons.download_rounded),
+                  label: const Text('استيراد البيانات'),
+                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                ),
+              ],
+            ),
+    );
+  }
+
+  List<Widget> _buildPresetSection(String title, List<String> keys) {
+    final labels = {
+      'khalasOthers': 'يُضاف للباقين',
+      'khalasWinner': 'يُنقص من المخلص',
+      'dablOthers': 'يُضاف للباقين',
+      'dablWinner': 'يُنقص من المدبل',
+      'dablLonOthers': 'يُضاف للباقين',
+      'dablLonWinner': 'يُنقص من مدبل اللون',
+    };
+    return [
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 12),
+              Row(
+                children: keys.map((k) => Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: TextField(
+                      controller: _ctrls[k],
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.center,
+                      decoration: InputDecoration(
+                        labelText: labels[k],
+                        labelStyle: const TextStyle(fontSize: 11),
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                      ),
+                    ),
+                  ),
+                )).toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
+}
+
 /*═══════════════════════════│ متصدّرو الفوز │═══════════════════════════*/
 class TopWinnersScreen extends StatefulWidget {
   const TopWinnersScreen({super.key});
@@ -3727,7 +4094,7 @@ class GameDetailScreen extends StatelessWidget {
   String _getPresetName(int p) {
     if (p == 400) return 'دبل لون';
     if (p == 200) return 'دبل';
-    if (p == 100) return 'عادي';
+    if (p == 100) return 'خالص';
     return 'صفر';
   }
 
