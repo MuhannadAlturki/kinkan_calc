@@ -1,0 +1,65 @@
+name: Build Version Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'رقم النسخة (مثال: v1.0)'
+        required: true
+      commit_sha:
+        description: 'SHA الـ commit'
+        required: true
+      description:
+        description: 'وصف النسخة بالعربي'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+
+      - name: Apply signing config from master
+        run: |
+          git fetch origin master
+          git checkout origin/master -- android/app/build.gradle.kts
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.4'
+          channel: stable
+
+      - name: Accept Android licenses
+        run: yes | flutter doctor --android-licenses || true
+
+      - name: Decode keystore
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/kinkan-release.keystore
+
+      - name: Create key.properties
+        run: |
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" > android/key.properties
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> android/key.properties
+          echo "keyAlias=kinkan" >> android/key.properties
+          echo "storeFile=kinkan-release.keystore" >> android/key.properties
+
+      - run: flutter pub get
+      - run: flutter build apk --release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: حاسبة كنكان ${{ inputs.version }}
+          body: ${{ inputs.description }}
+          files: build/app/outputs/flutter-apk/app-release.apk
+          token: ${{ secrets.GITHUB_TOKEN }}
