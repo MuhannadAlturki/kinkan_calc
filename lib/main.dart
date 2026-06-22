@@ -6,7 +6,8 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:math' as math;
 import 'package:confetti/confetti.dart';
 import 'package:file_picker/file_picker.dart';
@@ -3505,9 +3506,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
+        withData: kIsWeb,
       );
-      if (result == null || result.files.single.path == null) return;
-      final content = await File(result.files.single.path!).readAsString();
+      if (result == null) return;
+      final file = result.files.single;
+      final String content;
+      if (kIsWeb) {
+        content = String.fromCharCodes(file.bytes!);
+      } else {
+        content = await File(file.path!).readAsString();
+      }
       final List<dynamic> list = jsonDecode(content);
       final games = list.map((e) => GameRecord.fromJson(e)).toList();
       final existing = await SavedGames.load();

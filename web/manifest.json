@@ -1,11 +1,11 @@
 {
-    "name": "kinkan_calc",
-    "short_name": "kinkan_calc",
+    "name": "حاسبة كنكان",
+    "short_name": "كنكان",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#1a1a2e",
+    "theme_color": "#1a1a2e",
+    "description": "حاسبة نقاط لعبة كنكان",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
