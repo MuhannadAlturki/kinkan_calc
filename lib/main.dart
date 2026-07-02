@@ -45,6 +45,67 @@ class AppColors {
     if (idx == -1) return primary;
     return playerColors[idx % playerColors.length];
   }
+
+  static const gold = Color(0xFFFFD700);
+  static const silver = Color(0xFFC0C0C0);
+}
+
+/// يعرض الفائزين مقسّمين لمستويات: الأول ذهبي، الثاني فضي (ولو تعادلوا
+/// يقعون كلهم بنفس المستوى الذهبي).
+Widget buildWinnerTiersDisplay({
+  required Map<String, int> finalScores,
+  required List<String> winners,
+  double iconSize = 16,
+  double fontSize = 13,
+  Color? textColor,
+}) {
+  final tiers =
+  rankTiers({for (final name in winners) name: finalScores[name] ?? 0});
+  return Wrap(
+    spacing: 10,
+    runSpacing: 4,
+    crossAxisAlignment: WrapCrossAlignment.center,
+    children: [
+      for (int i = 0; i < tiers.length && i < 2; i++)
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.emoji_events_rounded,
+                color: i == 0 ? AppColors.gold : AppColors.silver,
+                size: iconSize),
+            const SizedBox(width: 4),
+            Text(
+              tiers[i].join('، '),
+              style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: fontSize,
+                  color: textColor),
+            ),
+          ],
+        ),
+    ],
+  );
+}
+
+/// يرتب اللاعبين لمستويات حسب النقاط تصاعدياً: المستوى الأول (index 0) هو
+/// الأقل نقاطاً (الفائز)، يليه المستوى الثاني، وهكذا. المتعادلون بنفس
+/// النقاط يقعون بنفس المستوى.
+List<List<String>> rankTiers(Map<String, int> scores) {
+  if (scores.isEmpty) return [];
+  final entries = scores.entries.toList()
+    ..sort((a, b) => a.value.compareTo(b.value));
+  final tiers = <List<String>>[];
+  int i = 0;
+  while (i < entries.length) {
+    final score = entries[i].value;
+    final tier = <String>[];
+    while (i < entries.length && entries[i].value == score) {
+      tier.add(entries[i].key);
+      i++;
+    }
+    tiers.add(tier);
+  }
+  return tiers;
 }
 
 /*═══════════════════════════│ تشغيل التطبيق │═══════════════════════════*/
@@ -305,6 +366,63 @@ class SavedGames {
       (await SharedPreferences.getInstance()).remove(_key);
 }
 
+/// لعبة جارية لم تنته بعد — تُحفظ دورياً حتى ما تضيع لو أغلق النظام
+/// التطبيق فجأة (شائع على متصفحات الجوال بعد فترة بالخلفية).
+class DraftGame {
+  DraftGame({
+    required this.players,
+    required this.limit,
+    required this.rounds,
+    required this.durationSeconds,
+    this.existingRecordId,
+  });
+
+  final List<String> players;
+  final int limit;
+  final List<Round> rounds;
+  final int durationSeconds;
+  final String? existingRecordId;
+
+  Map<String, dynamic> toJson() => {
+    'players': players,
+    'limit': limit,
+    'rounds': rounds.map((r) => r.toJson()).toList(),
+    'durationSeconds': durationSeconds,
+    'existingRecordId': existingRecordId,
+  };
+
+  factory DraftGame.fromJson(Map<String, dynamic> j) => DraftGame(
+    players: List<String>.from(j['players']),
+    limit: j['limit'],
+    rounds: (j['rounds'] as List).map((e) => Round.fromJson(e)).toList(),
+    durationSeconds: j['durationSeconds'] ?? 0,
+    existingRecordId: j['existingRecordId'],
+  );
+}
+
+class DraftGameManager {
+  static const _key = 'draft_game';
+
+  static Future<void> save(DraftGame draft) async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_key, jsonEncode(draft.toJson()));
+  }
+
+  static Future<DraftGame?> load() async {
+    final p = await SharedPreferences.getInstance();
+    final s = p.getString(_key);
+    if (s == null) return null;
+    try {
+      return DraftGame.fromJson(jsonDecode(s));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> clear() async =>
+      (await SharedPreferences.getInstance()).remove(_key);
+}
+
 class StatsManager {
   static const _dateKey = 'stats_reset_date';
   static Future<DateTime?> getResetDate() async {
@@ -324,6 +442,7 @@ class AppSettings {
     'khalasOthers': 100, 'khalasWinner': 0,
     'dablOthers': 200,   'dablWinner': 0,
     'dablLonOthers': 400,'dablLonWinner': 0,
+    'sharhaDabl': 50,    'sharhaDablLon': 100,
   };
 
   static Future<Map<String, int>> load() async {
@@ -347,6 +466,12 @@ class AppSettings {
     if (preset == 100) return s['khalasWinner']!;
     if (preset == 200) return s['dablWinner']!;
     if (preset == 400) return s['dablLonWinner']!;
+    return 0;
+  }
+
+  static int sharhaValue(int preset, Map<String, int> s) {
+    if (preset == 200) return s['sharhaDabl'] ?? 50;
+    if (preset == 400) return s['sharhaDablLon'] ?? 100;
     return 0;
   }
 }
@@ -457,6 +582,58 @@ class _PlayerSetupScreenState extends State<PlayerSetupScreen> {
     super.initState();
     SavedNames.load().then((v) => setState(() => _savedNames = v));
     SavedGroups.load().then((v) => setState(() => _groups = v));
+    DraftGameManager.load().then((draft) {
+      if (draft != null && mounted) {
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _offerResumeDraft(draft));
+      }
+    });
+  }
+
+  Future<void> _offerResumeDraft(DraftGame draft) async {
+    final resume = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('لعبة لم تكتمل'),
+        content: Text(
+            'لديك لعبة سابقة لم تُنهَ (${draft.players.join('، ')}). '
+                'هل تريد استكمالها؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('تجاهل'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('استكمال'),
+          ),
+        ],
+      ),
+    );
+
+    if (resume == true) {
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GameScreen(
+            players: draft.players.map((n) => Player(n)).toList(),
+            limit: draft.limit,
+            existingRecordId: draft.existingRecordId,
+            initialHistory: draft.rounds,
+            initialDuration: draft.durationSeconds,
+          ),
+        ),
+      );
+    } else {
+      await DraftGameManager.clear();
+    }
   }
 
   Future<void> _saveGroup() async {
@@ -868,7 +1045,7 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   late int _limit;
   int _roundNo = 1;
   Set<String> _winners = {};
@@ -877,6 +1054,7 @@ class _GameScreenState extends State<GameScreen> {
     'khalasOthers': 100, 'khalasWinner': 0,
     'dablOthers': 200,   'dablWinner': 0,
     'dablLonOthers': 400,'dablLonWinner': 0,
+    'sharhaDabl': 50,    'sharhaDablLon': 100,
   };
 
   final Map<String, TextEditingController> _fields = {};
@@ -887,9 +1065,11 @@ class _GameScreenState extends State<GameScreen> {
   bool _dialogOpen = false;
   List<String> _silentPlayers = [];
   List<String> _currentWinners = [];
+  List<String> _secondPlace = [];
 
   Timer? _gameTimer;
   int _elapsedSeconds = 0;
+  int _lastSavedHistoryLength = -1;
 
   List<Player> get _active => widget.players.where((p) => !p.out).toList();
   List<String> get _playerNames =>
@@ -901,6 +1081,7 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _limit = widget.limit;
     _elapsedSeconds = widget.initialDuration;
     for (final p in widget.players) {
@@ -913,6 +1094,7 @@ class _GameScreenState extends State<GameScreen> {
           widget.initialHistory!.map((r) => Round.fromJson(r.toJson())));
     }
     _roundNo = _realRoundsCount + 1;
+    _lastSavedHistoryLength = _history.length;
 
     AppSettings.load().then((s) => setState(() => _settings = s));
 
@@ -926,12 +1108,22 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _gameTimer?.cancel();
     _confetti.dispose();
     for (final c in _fields.values) {
       c.dispose();
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // على iOS Safari (PWA)، الشاشة قد تعرض إطاراً قديماً بعد الرجوع من
+    // الخلفية رغم أن البيانات الفعلية سليمة — نجبر إعادة رسم فورية.
+    if (state == AppLifecycleState.resumed && mounted) {
+      setState(() {});
+    }
   }
 
   String _formatDuration(int seconds) {
@@ -981,7 +1173,7 @@ class _GameScreenState extends State<GameScreen> {
     HapticFeedback.lightImpact();
     final ctrl = _fields[playerName]!;
     int current = int.tryParse(ctrl.text) ?? 0;
-    current += (_preset == 200) ? 50 : 100;
+    current += AppSettings.sharhaValue(_preset, _settings);
     ctrl.text = current.toString();
     _recalcTotals();
   }
@@ -1031,19 +1223,17 @@ class _GameScreenState extends State<GameScreen> {
       stepWinners = roles.winners;
     }
 
-    if (_history.where((r) => !r.isEvent).isEmpty) {
-      final roles = _computeRoles(
-        activePlayers: widget.players.where((p) => !p.out).toList(),
-        previousSilent: [],
-        lastWinner: '',
-        historySubset: [],
-      );
-      stepSilent = roles.silent;
-      stepWinners = roles.winners;
-    }
+    final hasRealRound = _history.any((r) => !r.isEvent);
 
-    _silentPlayers = stepSilent;
-    _currentWinners = stepWinners;
+    _silentPlayers = hasRealRound ? stepSilent : [];
+    _currentWinners = hasRealRound ? stepWinners : [];
+    _secondPlace = hasRealRound
+        ? rankTiers({for (final p in _active) p.name: p.score})
+        .skip(1)
+        .take(1)
+        .expand((tier) => tier)
+        .toList()
+        : [];
 
     for (final p in widget.players) {
       p.out = p.score >= _limit;
@@ -1052,7 +1242,21 @@ class _GameScreenState extends State<GameScreen> {
     if (!isInit) {
       _checkForWinners();
       setState(() {});
+      if (_history.length != _lastSavedHistoryLength) {
+        _lastSavedHistoryLength = _history.length;
+        _saveDraft();
+      }
     }
+  }
+
+  Future<void> _saveDraft() async {
+    await DraftGameManager.save(DraftGame(
+      players: widget.players.map((p) => p.name).toList(),
+      limit: _limit,
+      rounds: List.of(_history),
+      durationSeconds: _elapsedSeconds,
+      existingRecordId: widget.existingRecordId,
+    ));
   }
 
   _RolesData _computeRoles({
@@ -1149,6 +1353,14 @@ class _GameScreenState extends State<GameScreen> {
     HapticFeedback.heavyImpact();
     final winnersToShow = List<Player>.from(_active);
     winnersToShow.sort((a, b) => a.score.compareTo(b.score));
+    final winnerTiers =
+    rankTiers({for (final p in winnersToShow) p.name: p.score});
+    Color? medalColor(String name) {
+      final idx = winnerTiers.indexWhere((t) => t.contains(name));
+      if (idx == 0) return AppColors.gold;
+      if (idx == 1) return AppColors.silver;
+      return null;
+    }
 
     final String titleText =
     winnersToShow.length > 1 ? 'مبروك للفائزين! 🎉' : 'مبروك للفائز! 🎉';
@@ -1201,6 +1413,11 @@ class _GameScreenState extends State<GameScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (medalColor(p.name) != null) ...[
+                        Icon(Icons.emoji_events_rounded,
+                            color: medalColor(p.name), size: 20),
+                        const SizedBox(width: 4),
+                      ],
                       PlayerAvatar(
                           name: p.name,
                           allPlayers: _playerNames,
@@ -1401,6 +1618,7 @@ class _GameScreenState extends State<GameScreen> {
                 };
                 Navigator.pop(context);
                 _recalcTotals();
+                _saveDraft();
               },
               icon: const Icon(Icons.save_rounded),
               label: const Text('حفظ التعديلات'),
@@ -1435,6 +1653,7 @@ class _GameScreenState extends State<GameScreen> {
     } else {
       await SavedGames.add(record);
     }
+    await DraftGameManager.clear();
   }
 
   Future<bool> _confirmExit() async {
@@ -1716,8 +1935,8 @@ class _GameScreenState extends State<GameScreen> {
                   color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
@@ -1733,30 +1952,34 @@ class _GameScreenState extends State<GameScreen> {
                         ),
                       ],
                     ),
-                    if (_active.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppColors.accent
-                              .withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.emoji_events_rounded,
-                                size: 14, color: AppColors.accent),
-                            const SizedBox(width: 4),
-                            Text(
-                              _currentWinners.join('، '),
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.accent,
-                                  fontWeight: FontWeight.bold),
+                    if (_silentPlayers.isNotEmpty ||
+                        _currentWinners.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          if (_silentPlayers.isNotEmpty)
+                            _buildRankChip(
+                              icon: Icons.volume_off_rounded,
+                              names: _silentPlayers.join('، '),
+                              color: Colors.orange,
                             ),
-                          ],
-                        ),
+                          if (_currentWinners.isNotEmpty)
+                            _buildRankChip(
+                              icon: Icons.emoji_events_rounded,
+                              names: _currentWinners.join('، '),
+                              color: AppColors.gold,
+                            ),
+                          if (_secondPlace.isNotEmpty)
+                            _buildRankChip(
+                              icon: Icons.emoji_events_rounded,
+                              names: _secondPlace.join('، '),
+                              color: AppColors.silver,
+                            ),
+                        ],
                       ),
+                    ],
                   ],
                 ),
               ),
@@ -1790,45 +2013,6 @@ class _GameScreenState extends State<GameScreen> {
                   ),
                 ),
               ),
-              if (_active.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest
-                        .withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatusInfo(
-                          icon: Icons.volume_off_rounded,
-                          label: _active.length == 3
-                              ? 'الساكت'
-                              : 'الساكتين',
-                          value: _silentPlayers.join('، '),
-                          color: Colors.orange,
-                        ),
-                      ),
-                      Container(
-                        width: 1,
-                        height: 30,
-                        color: Colors.grey.shade300,
-                      ),
-                      Expanded(
-                        child: _buildStatusInfo(
-                          icon: Icons.emoji_events_rounded,
-                          label: 'الفائزين',
-                          value: _currentWinners.join('، '),
-                          color: AppColors.accent,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               _buildScoresSection(),
             ],
           ),
@@ -2090,40 +2274,26 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  Widget _buildStatusInfo({
+  Widget _buildRankChip({
     required IconData icon,
-    required String label,
-    required String value,
+    required String names,
     required Color color,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: color),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                      fontSize: 10, color: Colors.grey.shade600),
-                ),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 4),
+          Text(
+            names,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -3394,21 +3564,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    const Icon(Icons.emoji_events_rounded,
-                        color: AppColors.accent, size: 16),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        g.winners.join('، '),
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.accent),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                buildWinnerTiersDisplay(
+                  finalScores: g.finalScores,
+                  winners: g.winners,
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -3463,6 +3621,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ('dablWinner', 'يُنقص من المدبل'),
     ('dablLonOthers', 'يُضاف للباقين — دبل لون'),
     ('dablLonWinner', 'يُنقص من مدبل اللون'),
+    ('sharhaDabl', 'شرهة الدبل'),
+    ('sharhaDablLon', 'شرهة الدبل لون'),
   ];
 
   late final Map<String, TextEditingController> _ctrls;
@@ -3585,6 +3745,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ..._buildPresetSection('دبل', ['dablOthers', 'dablWinner']),
                 const SizedBox(height: 8),
                 ..._buildPresetSection('دبل لون', ['dablLonOthers', 'dablLonWinner']),
+                const SizedBox(height: 8),
+                ..._buildPresetSection('الشرهة', ['sharhaDabl', 'sharhaDablLon']),
                 const SizedBox(height: 24),
                 // تصدير واستيراد
                 Text('البيانات', style: Theme.of(context).textTheme.titleMedium),
@@ -3615,6 +3777,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       'dablWinner': 'يُنقص من المدبل',
       'dablLonOthers': 'يُضاف للباقين',
       'dablLonWinner': 'يُنقص من مدبل اللون',
+      'sharhaDabl': 'قيمة شرهة الدبل',
+      'sharhaDablLon': 'قيمة شرهة الدبل لون',
     };
     return [
       Card(
@@ -4121,6 +4285,15 @@ class GameDetailScreen extends StatelessWidget {
         '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     final realRoundsCount =
         record.rounds.where((r) => !r.isPlayerAddition).length;
+    final winnerTiers = rankTiers({
+      for (final name in record.winners) name: record.finalScores[name] ?? 0
+    });
+    Color? medalColor(String name) {
+      final idx = winnerTiers.indexWhere((t) => t.contains(name));
+      if (idx == 0) return AppColors.gold;
+      if (idx == 1) return AppColors.silver;
+      return null;
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -4184,19 +4357,38 @@ class GameDetailScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'الفائز',
-                          style:
-                          TextStyle(color: Colors.white, fontSize: 13),
-                        ),
                         Text(
-                          record.winners.join('، '),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          winnerTiers.length > 1 ? 'الفائزون' : 'الفائز',
+                          style:
+                          const TextStyle(color: Colors.white, fontSize: 13),
                         ),
+                        for (int i = 0;
+                        i < winnerTiers.length && i < 2;
+                        i++)
+                          Padding(
+                            padding: EdgeInsets.only(top: i == 0 ? 0 : 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (i == 1)
+                                  const Padding(
+                                    padding: EdgeInsets.only(left: 6),
+                                    child: Icon(Icons.emoji_events_rounded,
+                                        color: AppColors.silver, size: 16),
+                                  ),
+                                Text(
+                                  winnerTiers[i].join('، '),
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: i == 0 ? 22 : 15,
+                                    fontWeight: i == 0
+                                        ? FontWeight.bold
+                                        : FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -4256,6 +4448,7 @@ class GameDetailScreen extends StatelessWidget {
             const SizedBox(height: 12),
             ...record.finalScores.entries.map((e) {
               final isWinner = record.winners.contains(e.key);
+              final medal = medalColor(e.key);
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.symmetric(
@@ -4280,9 +4473,9 @@ class GameDetailScreen extends StatelessWidget {
                           style: const TextStyle(
                               fontWeight: FontWeight.bold)),
                     ),
-                    if (isWinner)
-                      const Icon(Icons.emoji_events_rounded,
-                          color: AppColors.accent, size: 20),
+                    if (medal != null)
+                      Icon(Icons.emoji_events_rounded,
+                          color: medal, size: 20),
                     const SizedBox(width: 8),
                     Text(
                       '${e.value}',
