@@ -1161,6 +1161,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   /// تشخيصي مؤقت: آخر أحداث دورة حياة التطبيق (resumed/paused/...) بالترتيب.
   final List<String> _lifecycleLog = [];
 
+  /// تشخيصي مؤقت: هوية قائمة widget.players لحظة آخر تطبيق ناجح لـ
+  /// _recalcTotals — نقارنها بهوية القائمة الحالية وقت الرسم.
+  int _lastAppliedListIdentity = 0;
+
   Timer? _gameTimer;
   int _elapsedSeconds = 0;
   int _lastSavedHistoryLength = -1;
@@ -1362,6 +1366,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     }
 
     _lastAppliedSum = widget.players.fold(0, (a, p) => a + p.score);
+    _lastAppliedListIdentity = identityHashCode(widget.players);
 
     final hasRealRound = _history.any((r) => !r.isEvent);
 
@@ -2182,6 +2187,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       'دورة الحياة: ${_lifecycleLog.join(" ← ")}',
                       style: TextStyle(
                           fontSize: 10,
+                          color: Theme.of(context).colorScheme.outline),
+                    ),
+                    // تشخيصي: قراءة حيّة لنقاط widget.players وهوياتها
+                    // بالضبط لحظة هذا الرسم — نقارنها بـ"تطبيق" أعلاه.
+                    Text(
+                      'حيّ: ${widget.players.map((p) => '${p.name}:${p.score}').join(' ')} '
+                      '| هوية-رسم:${identityHashCode(widget.players)} '
+                      'هوية-تطبيق:$_lastAppliedListIdentity',
+                      style: TextStyle(
+                          fontSize: 9,
                           color: Theme.of(context).colorScheme.outline),
                     ),
                     if (_silentPlayers.isNotEmpty ||
@@ -3874,7 +3889,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.6';
+const String kAppVersion = '1.1.7';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
