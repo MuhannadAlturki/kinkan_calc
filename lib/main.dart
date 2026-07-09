@@ -1148,6 +1148,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   /// بالخلفية.
   int _redrawKey = 0;
 
+  /// عداد تشخيصي مؤقت: كم مرة فشلت _recalcTotals فعلياً باستثناء.
+  int _recalcErrorCount = 0;
+
   Timer? _gameTimer;
   int _elapsedSeconds = 0;
   int _lastSavedHistoryLength = -1;
@@ -1321,6 +1324,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     } catch (e, st) {
       debugPrint('kinkan: _recalcTotals فشلت، تم تجاهل النتيجة والاحتفاظ '
           'بآخر نقاط صحيحة: $e\n$st');
+      _recalcErrorCount++;
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 8),
+            content: Text('خطأ تشخيصي #$_recalcErrorCount: $e'),
+          ),
+        );
+      }
       return;
     }
 
@@ -2134,6 +2147,15 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                               color: AppColors.primary),
+                        ),
+                        // مؤقت للتشخيص: يوضح عدد الجولات المخزّنة فعلياً
+                        // بالذاكرة لحظة الرسم — يساعد نحدد هل يفرغ السجل
+                        // فعلاً عند الرجوع من الخلفية أو المشكلة بمكان ثاني.
+                        Text(
+                          '  (سجل:${_history.length} أخطاء:$_recalcErrorCount)',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Theme.of(context).colorScheme.outline),
                         ),
                       ],
                     ),
@@ -3827,7 +3849,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.4';
+const String kAppVersion = '1.1.5';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
