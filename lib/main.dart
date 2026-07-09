@@ -1202,9 +1202,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // على iOS Safari (PWA)، الشاشة قد تعرض إطاراً قديماً بعد الرجوع من
-    // الخلفية رغم أن البيانات الفعلية سليمة — نجبر إعادة رسم فورية.
+    // على المتصفحات (ويب/PWA)، الشاشة قد تعرض إطاراً قديماً أو نقاطاً صفرية
+    // بعد الرجوع من الخلفية رغم أن سجل الجولات سليم — نعيد حساب النقاط من
+    // السجل (مصدر الحقيقة) بدل الاكتفاء بإعادة رسم قد تعرض بيانات قديمة.
+    // isInit:true يتجنب إعادة إطلاق نافذة "مبروك" أو حفظ مسودة إضافية.
     if (state == AppLifecycleState.resumed && mounted) {
+      _recalcTotals(isInit: true);
       setState(() {});
     }
   }
@@ -1354,8 +1357,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   ///   الفائزون فقط (ولو أقل من العدد المحدد)، وكل المتجاوزين خاسرون.
   /// - لا آمن إطلاقاً (الكل تجاوز بنفس الجولة) → تُملأ مقاعد الفائزين من
   ///   المتجاوزين بمجموعات متساوية النقاط تصاعدياً: ملء تام أو جزئي يُنهي
-  ///   اللعبة بالمقبولين فقط، وإن كانت أول مجموعة أكبر من المقاعد يستمر
-  ///   الجميع باللعب حتى تتفرق النقاط.
+  ///   اللعبة بالمقبولين فقط (والباقي خاسر نهائياً). وإن كانت أول مجموعة
+  ///   متعادلة أكبر من المقاعد، تلك المجموعة وحدها تكمل اللعب، وأي مجموعة
+  ///   أعلى منها نقاطاً تخرج نهائياً كخاسرة فوراً.
   _EndEval _evaluateEnd(List<Player> players) {
     final safe = players.where((p) => p.score < _limit).toList();
     final crossed = players.where((p) => p.score >= _limit).toList();
@@ -1381,16 +1385,24 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     final tiers = rankTiers({for (final p in crossed) p.name: p.score});
     final seated = <String>[];
     int remaining = _winnersCount;
-    for (final tier in tiers) {
-      if (tier.length > remaining) break;
-      seated.addAll(tier);
-      remaining -= tier.length;
+    int contestedIndex = -1;
+    for (int i = 0; i < tiers.length; i++) {
+      if (tiers[i].length > remaining) {
+        contestedIndex = i;
+        break;
+      }
+      seated.addAll(tiers[i]);
+      remaining -= tiers[i].length;
       if (remaining == 0) break;
     }
 
     if (seated.isEmpty) {
-      // تعادل يمنع فصل الفائزين — الجميع يكمل اللعب رغم تجاوز الحد
-      return _EndEval(ended: false, newlyOut: {}, winners: []);
+      // أول مجموعة متعادلة أكبر من المقاعد المتاحة: تعادل يمنع فصل
+      // الفائزين ضمن هذي المجموعة تحديداً — تكمل اللعب وحدها، وأي مجموعة
+      // أعلى منها نقاطاً تخرج نهائياً كخاسرة (أسوأ منها بلا جدال).
+      final higherLosers =
+      tiers.skip(contestedIndex + 1).expand((t) => t).toSet();
+      return _EndEval(ended: false, newlyOut: higherLosers, winners: []);
     }
     return _EndEval(
       ended: true,
