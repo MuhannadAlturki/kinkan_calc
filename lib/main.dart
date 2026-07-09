@@ -1142,6 +1142,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   bool _gameEnded = false;
   List<String> _finalWinners = [];
 
+  /// يتغيّر عند الرجوع من الخلفية لإجبار Flutter على إعادة بناء شجرة
+  /// الشاشة بالكامل (مو مجرد إعادة رسم) — يعالج بقايا رسم قديمة على
+  /// المتصفحات بعد فقدان سياق العرض (GPU context) أثناء وجود التبويب
+  /// بالخلفية.
+  int _redrawKey = 0;
+
   Timer? _gameTimer;
   int _elapsedSeconds = 0;
   int _lastSavedHistoryLength = -1;
@@ -1183,9 +1189,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
     // إجراء دفاعي لعلة "الإطار القديم" على iOS: أول رسمة لشاشة لعب جديدة
     // (مثل استكمال لعبة محفوظة بعد إعادة تشغيل التطبيق) قد تعرض محتوى
-    // قديماً رغم سلامة البيانات — نجبر إعادة رسم بعد أول إطار.
+    // قديماً رغم سلامة البيانات — نجبر إعادة بناء الشجرة بعد أول إطار.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) setState(() {});
+      if (mounted) setState(() => _redrawKey++);
     });
   }
 
@@ -1204,11 +1210,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // على المتصفحات (ويب/PWA)، الشاشة قد تعرض إطاراً قديماً أو نقاطاً صفرية
     // بعد الرجوع من الخلفية رغم أن سجل الجولات سليم — نعيد حساب النقاط من
-    // السجل (مصدر الحقيقة) بدل الاكتفاء بإعادة رسم قد تعرض بيانات قديمة.
-    // isInit:true يتجنب إعادة إطلاق نافذة "مبروك" أو حفظ مسودة إضافية.
+    // السجل (مصدر الحقيقة)، ونغيّر _redrawKey لإجبار إعادة بناء شجرة
+    // الشاشة بالكامل (مو مجرد setState) لعلاج بقايا رسم من فقدان سياق
+    // العرض بالخلفية. isInit:true يتجنب إعادة إطلاق نافذة "مبروك" أو حفظ
+    // مسودة إضافية.
     if (state == AppLifecycleState.resumed && mounted) {
       _recalcTotals(isInit: true);
-      setState(() {});
+      setState(() => _redrawKey++);
     }
   }
 
@@ -2085,7 +2093,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           ),
         ],
       ),
-      body: SafeArea(
+      body: KeyedSubtree(
+        key: ValueKey(_redrawKey),
+        child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Column(
@@ -2181,6 +2191,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
               _buildScoresSection(),
             ],
           ),
+        ),
         ),
       ),
     ),
