@@ -19,7 +19,7 @@ jobs:
           channel: stable
 
       - run: flutter pub get
-      - run: flutter build web --release --base-href /kinkan_calc/
+      - run: flutter build web --release --base-href /kinkan_calc/ --pwa-strategy=none
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
