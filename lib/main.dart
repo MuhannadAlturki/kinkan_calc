@@ -1272,11 +1272,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   void _recalcTotals({bool isInit = false}) {
-    for (final p in widget.players) {
-      _previousScores[p.name] = p.score;
-      p.score = 0;
-      p.out = false;
-    }
+    // نحسب على نسخ مؤقتة من اللاعبين، ولا نطبّق النتيجة على الحالة
+    // الحقيقية (widget.players) إلا بعد نجاح إعادة تشغيل السجل بالكامل.
+    // هذا يمنع نصف حساب فاشل (استثناء غير متوقع) من ترك نقاط اللاعبين
+    // مصفّرة نهائياً — لو صار خطأ، تبقى آخر نقاط صحيحة كما هي بدل ما
+    // تنصفر بصمت (شفنا هذا يصير فعلياً عند الرجوع من الخلفية).
+    final working = widget.players.map((p) => p.clone()).toList();
 
     List<String> stepSilent = [];
     List<String> stepWinners = [];
@@ -1284,37 +1285,51 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     bool ended = false;
     List<String> finalWinners = [];
 
-    for (int i = 0; i < _history.length; i++) {
-      final r = _history[i];
-      r.points.forEach((n, v) {
-        final player = widget.players.firstWhere(
-              (p) => p.name == n,
-          orElse: () => Player(''),
+    try {
+      for (int i = 0; i < _history.length; i++) {
+        final r = _history[i];
+        r.points.forEach((n, v) {
+          final player = working.firstWhere(
+                (p) => p.name == n,
+            orElse: () => Player(''),
+          );
+          if (player.name.isNotEmpty) player.score += v;
+        });
+
+        if (r.isEvent) continue;
+
+        // تقييم قاعدة نهاية اللعبة على من لم يخرج بعد
+        final eval = _evaluateEnd(
+            working.where((p) => !outNames.contains(p.name)).toList());
+        outNames.addAll(eval.newlyOut);
+        ended = eval.ended;
+        finalWinners = eval.winners;
+
+        for (final p in working) {
+          p.out = outNames.contains(p.name);
+        }
+
+        final roles = _computeRoles(
+          activePlayers: working.where((p) => !p.out).toList(),
+          previousSilent: stepSilent,
+          lastWinner: r.winner.split(',').first.trim(),
+          historySubset: _history.sublist(0, i + 1),
         );
-        if (player.name.isNotEmpty) player.score += v;
-      });
-
-      if (r.isEvent) continue;
-
-      // تقييم قاعدة نهاية اللعبة على من لم يخرج بعد
-      final eval = _evaluateEnd(
-          widget.players.where((p) => !outNames.contains(p.name)).toList());
-      outNames.addAll(eval.newlyOut);
-      ended = eval.ended;
-      finalWinners = eval.winners;
-
-      for (final p in widget.players) {
-        p.out = outNames.contains(p.name);
+        stepSilent = roles.silent;
+        stepWinners = roles.winners;
       }
+    } catch (e, st) {
+      debugPrint('kinkan: _recalcTotals فشلت، تم تجاهل النتيجة والاحتفاظ '
+          'بآخر نقاط صحيحة: $e\n$st');
+      return;
+    }
 
-      final roles = _computeRoles(
-        activePlayers: widget.players.where((p) => !p.out).toList(),
-        previousSilent: stepSilent,
-        lastWinner: r.winner.split(',').first.trim(),
-        historySubset: _history.sublist(0, i + 1),
-      );
-      stepSilent = roles.silent;
-      stepWinners = roles.winners;
+    // نجاح كامل — الآن فقط نطبّق النتائج على اللاعبين الحقيقيين
+    for (final p in widget.players) {
+      _previousScores[p.name] = p.score;
+      final w = working.firstWhere((x) => x.name == p.name, orElse: () => p);
+      p.score = w.score;
+      p.out = w.out;
     }
 
     final hasRealRound = _history.any((r) => !r.isEvent);
@@ -1331,9 +1346,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         .toList()
         : [];
 
-    for (final p in widget.players) {
-      p.out = outNames.contains(p.name);
-    }
     _gameEnded = ended;
     _finalWinners = finalWinners;
 
@@ -3815,7 +3827,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.3';
+const String kAppVersion = '1.1.4';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
