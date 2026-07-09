@@ -1151,6 +1151,16 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   /// عداد تشخيصي مؤقت: كم مرة فشلت _recalcTotals فعلياً باستثناء.
   int _recalcErrorCount = 0;
 
+  /// تشخيصي مؤقت: مجموع نقاط working فور نجاح الحساب (قبل التطبيق على
+  /// widget.players)، ومجموع widget.players الفعلي بعد التطبيق — لو
+  /// اختلفوا يعني المشكلة بخطوة "التطبيق"، ولو تساووا وصفر يعني المشكلة
+  /// بخطوة "الجمع" نفسها رغم نجاحها الظاهري.
+  int _lastWorkingSum = -1;
+  int _lastAppliedSum = -1;
+
+  /// تشخيصي مؤقت: آخر أحداث دورة حياة التطبيق (resumed/paused/...) بالترتيب.
+  final List<String> _lifecycleLog = [];
+
   Timer? _gameTimer;
   int _elapsedSeconds = 0;
   int _lastSavedHistoryLength = -1;
@@ -1217,9 +1227,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     // الشاشة بالكامل (مو مجرد setState) لعلاج بقايا رسم من فقدان سياق
     // العرض بالخلفية. isInit:true يتجنب إعادة إطلاق نافذة "مبروك" أو حفظ
     // مسودة إضافية.
+    _lifecycleLog.add(state.name);
+    if (_lifecycleLog.length > 6) _lifecycleLog.removeAt(0);
     if (state == AppLifecycleState.resumed && mounted) {
       _recalcTotals(isInit: true);
       setState(() => _redrawKey++);
+    } else if (mounted) {
+      setState(() {});
     }
   }
 
@@ -1337,6 +1351,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       return;
     }
 
+    _lastWorkingSum = working.fold(0, (a, p) => a + p.score);
+
     // نجاح كامل — الآن فقط نطبّق النتائج على اللاعبين الحقيقيين
     for (final p in widget.players) {
       _previousScores[p.name] = p.score;
@@ -1344,6 +1360,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       p.score = w.score;
       p.out = w.out;
     }
+
+    _lastAppliedSum = widget.players.fold(0, (a, p) => a + p.score);
 
     final hasRealRound = _history.any((r) => !r.isEvent);
 
@@ -2152,12 +2170,19 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         // بالذاكرة لحظة الرسم — يساعد نحدد هل يفرغ السجل
                         // فعلاً عند الرجوع من الخلفية أو المشكلة بمكان ثاني.
                         Text(
-                          '  (سجل:${_history.length} أخطاء:$_recalcErrorCount)',
+                          '  (سجل:${_history.length} أخطاء:$_recalcErrorCount '
+                          'جمع:$_lastWorkingSum تطبيق:$_lastAppliedSum)',
                           style: TextStyle(
                               fontSize: 11,
                               color: Theme.of(context).colorScheme.outline),
                         ),
                       ],
+                    ),
+                    Text(
+                      'دورة الحياة: ${_lifecycleLog.join(" ← ")}',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: Theme.of(context).colorScheme.outline),
                     ),
                     if (_silentPlayers.isNotEmpty ||
                         _currentWinners.isNotEmpty) ...[
@@ -3849,7 +3874,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.5';
+const String kAppVersion = '1.1.6';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
