@@ -95129,7 +95129,7 @@ l.push(A.aFv(B.Q4,B.aeg,o.ga7z(),A.aFw(n,n,n,n,n,n,n,n,n,n,n,B.HH,n,n,n,n,n,n,n,
 l.push(B.bH)
 l.push(A.aFv(B.PY,B.aee,o.gac2(),A.aFw(n,n,n,n,n,n,n,n,n,n,n,B.HH,n,n,n,n,n,n,n,n)))
 l.push(B.k7)
-l.push(A.dv(A.ay("\u0627\u0644\u0646\u0633\u062e\u0629 1.1.13",n,n,n,n,A.c8(n,n,B.aU,n,n,n,n,n,n,n,n,12,n,n,n,n,n,!0,n,n,n,n,n,n,n,n),n,n),n,n))
+l.push(A.dv(A.ay("\u0627\u0644\u0646\u0633\u062e\u0629 1.1.14",n,n,n,n,A.c8(n,n,B.aU,n,n,n,n,n,n,n,n,12,n,n,n,n,n,!0,n,n,n,n,n,n,n,n),n,n),n,n))
 l=A.acY(l,n,B.fJ,B.al)}return A.qx(k,l,n,n)},
 D1(a,b,c){var s,r,q,p=null,o=t.N,n=A.as(["khalasOthers","\u064a\u064f\u0636\u0627\u0641 \u0644\u0644\u0628\u0627\u0642\u064a\u0646","khalasWinner","\u064a\u064f\u0646\u0642\u0635 \u0645\u0646 \u0627\u0644\u0645\u062e\u0644\u0635","khalasQuick1","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 1","khalasQuick2","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 2","dablOthers","\u064a\u064f\u0636\u0627\u0641 \u0644\u0644\u0628\u0627\u0642\u064a\u0646","dablWinner","\u064a\u064f\u0646\u0642\u0635 \u0645\u0646 \u0627\u0644\u0645\u062f\u0628\u0644","dablQuick1","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 1","dablQuick2","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 2","dablLonOthers","\u064a\u064f\u0636\u0627\u0641 \u0644\u0644\u0628\u0627\u0642\u064a\u0646","dablLonWinner","\u064a\u064f\u0646\u0642\u0635 \u0645\u0646 \u0645\u062f\u0628\u0644 \u0627\u0644\u0644\u0648\u0646","dablLonQuick1","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 1","dablLonQuick2","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 2"],o,o)
 o=this.d.h(0,b)
