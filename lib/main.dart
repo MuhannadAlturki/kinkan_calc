@@ -1156,23 +1156,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   /// بالخلفية.
   int _redrawKey = 0;
 
-  /// عداد تشخيصي مؤقت: كم مرة فشلت _recalcTotals فعلياً باستثناء.
-  int _recalcErrorCount = 0;
-
-  /// تشخيصي مؤقت: مجموع نقاط working فور نجاح الحساب (قبل التطبيق على
-  /// _players)، ومجموع _players الفعلي بعد التطبيق — لو
-  /// اختلفوا يعني المشكلة بخطوة "التطبيق"، ولو تساووا وصفر يعني المشكلة
-  /// بخطوة "الجمع" نفسها رغم نجاحها الظاهري.
-  int _lastWorkingSum = -1;
-  int _lastAppliedSum = -1;
-
-  /// تشخيصي مؤقت: آخر أحداث دورة حياة التطبيق (resumed/paused/...) بالترتيب.
-  final List<String> _lifecycleLog = [];
-
-  /// تشخيصي مؤقت: هوية قائمة _players لحظة آخر تطبيق ناجح لـ
-  /// _recalcTotals — نقارنها بهوية القائمة الحالية وقت الرسم.
-  int _lastAppliedListIdentity = 0;
-
   Timer? _gameTimer;
   int _elapsedSeconds = 0;
   int _lastSavedHistoryLength = -1;
@@ -1234,19 +1217,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // على المتصفحات (ويب/PWA)، الشاشة قد تعرض إطاراً قديماً أو نقاطاً صفرية
-    // بعد الرجوع من الخلفية رغم أن سجل الجولات سليم — نعيد حساب النقاط من
-    // السجل (مصدر الحقيقة)، ونغيّر _redrawKey لإجبار إعادة بناء شجرة
-    // الشاشة بالكامل (مو مجرد setState) لعلاج بقايا رسم من فقدان سياق
-    // العرض بالخلفية. isInit:true يتجنب إعادة إطلاق نافذة "مبروك" أو حفظ
-    // مسودة إضافية.
-    _lifecycleLog.add(state.name);
-    if (_lifecycleLog.length > 6) _lifecycleLog.removeAt(0);
+    // على المتصفحات (ويب/PWA)، الشاشة قد تعرض إطاراً قديماً بعد الرجوع من
+    // الخلفية رغم أن البيانات سليمة — نعيد حساب النقاط من السجل (مصدر
+    // الحقيقة) ونغيّر _redrawKey لإجبار إعادة بناء شجرة الشاشة بالكامل.
+    // isInit:true يتجنب إعادة إطلاق نافذة "مبروك" أو حفظ مسودة إضافية.
     if (state == AppLifecycleState.resumed && mounted) {
       _recalcTotals(isInit: true);
       setState(() => _redrawKey++);
-    } else if (mounted) {
-      setState(() {});
     }
   }
 
@@ -1351,20 +1328,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     } catch (e, st) {
       debugPrint('kinkan: _recalcTotals فشلت، تم تجاهل النتيجة والاحتفاظ '
           'بآخر نقاط صحيحة: $e\n$st');
-      _recalcErrorCount++;
-      if (mounted) {
-        setState(() {});
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            duration: const Duration(seconds: 8),
-            content: Text('خطأ تشخيصي #$_recalcErrorCount: $e'),
-          ),
-        );
-      }
       return;
     }
-
-    _lastWorkingSum = working.fold(0, (a, p) => a + p.score);
 
     // نجاح كامل — الآن فقط نطبّق النتائج على اللاعبين الحقيقيين
     for (final p in _players) {
@@ -1373,9 +1338,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       p.score = w.score;
       p.out = w.out;
     }
-
-    _lastAppliedSum = _players.fold(0, (a, p) => a + p.score);
-    _lastAppliedListIdentity = identityHashCode(_players);
 
     final hasRealRound = _history.any((r) => !r.isEvent);
 
@@ -2180,33 +2142,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               fontSize: 16,
                               color: AppColors.primary),
                         ),
-                        // مؤقت للتشخيص: يوضح عدد الجولات المخزّنة فعلياً
-                        // بالذاكرة لحظة الرسم — يساعد نحدد هل يفرغ السجل
-                        // فعلاً عند الرجوع من الخلفية أو المشكلة بمكان ثاني.
-                        Text(
-                          '  (سجل:${_history.length} أخطاء:$_recalcErrorCount '
-                          'جمع:$_lastWorkingSum تطبيق:$_lastAppliedSum)',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context).colorScheme.outline),
-                        ),
                       ],
-                    ),
-                    Text(
-                      'دورة الحياة: ${_lifecycleLog.join(" ← ")}',
-                      style: TextStyle(
-                          fontSize: 10,
-                          color: Theme.of(context).colorScheme.outline),
-                    ),
-                    // تشخيصي: قراءة حيّة لنقاط _players وهوياتها
-                    // بالضبط لحظة هذا الرسم — نقارنها بـ"تطبيق" أعلاه.
-                    Text(
-                      'حيّ: ${_players.map((p) => '${p.name}:${p.score}').join(' ')} '
-                      '| هوية-رسم:${identityHashCode(_players)} '
-                      'هوية-تطبيق:$_lastAppliedListIdentity',
-                      style: TextStyle(
-                          fontSize: 9,
-                          color: Theme.of(context).colorScheme.outline),
                     ),
                     if (_silentPlayers.isNotEmpty ||
                         _currentWinners.isNotEmpty) ...[
@@ -2218,20 +2154,21 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                           if (_silentPlayers.isNotEmpty)
                             _buildRankChip(
                               icon: Icons.volume_off_rounded,
+                              label: '🃏 الموزّعون',
                               names: _silentPlayers.join('، '),
-                              color: Colors.orange,
+                              color: AppColors.danger,
                             ),
                           if (_currentWinners.isNotEmpty)
                             _buildRankChip(
                               icon: Icons.emoji_events_rounded,
-                              label: 'المتصدرون الآن',
+                              label: 'الأول',
                               names: _currentWinners.join('، '),
                               color: AppColors.gold,
                             ),
                           if (_secondPlace.isNotEmpty)
                             _buildRankChip(
                               icon: Icons.emoji_events_rounded,
-                              label: 'يليهم',
+                              label: 'الثاني',
                               names: _secondPlace.join('، '),
                               color: AppColors.silver,
                             ),
@@ -3898,7 +3835,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.8';
+const String kAppVersion = '1.1.9';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});

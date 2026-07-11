@@ -1,7 +1,7 @@
 name: kinkan_calc
 description: لعبة حاسبة كنكان
 publish_to: none
-version: 1.1.8+9
+version: 1.1.9+10
 
 environment:
   sdk: ^3.8.1
