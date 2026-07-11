@@ -94070,12 +94070,12 @@ j=B.W.bV(0.1)
 s=A.bn(14)
 r=A.a([A.bL(A.a([B.Qb,B.aY,A.ay("\u0627\u0644\u062c\u0648\u0644\u0629 "+p.r,o,o,o,o,B.aaD,o,o)],n),B.r,B.n,B.t)],n)
 if(p.ay.length!==0||p.ch.length!==0){k=A.a([],n)
-q=p.ay
-if(q.length!==0)k.push(p.D2(B.aN,B.Pt,"\ud83c\udccf \u0627\u0644\u0645\u0648\u0632\u0651\u0639\u0648\u0646",B.b.bK(q,"\u060c ")))
 q=p.ch
 if(q.length!==0)k.push(p.D2(B.es,B.bK,"\u0627\u0644\u0623\u0648\u0644",B.b.bK(q,"\u060c ")))
 q=p.CW
 if(q.length!==0)k.push(p.D2(B.et,B.bK,"\u0627\u0644\u062b\u0627\u0646\u064a",B.b.bK(q,"\u060c ")))
+q=p.ay
+if(q.length!==0)k.push(p.D2(B.aN,B.Pt,"\ud83c\udccf \u0627\u0644\u0645\u0648\u0632\u0651\u0639\u0648\u0646",B.b.bK(q,"\u060c ")))
 B.b.T(r,A.a([B.bN,A.rc(k,B.du,6,6)],n))}k=A.bz(o,A.c_(r,B.aE,B.n,B.t),B.p,o,o,new A.bd(j,o,o,s,o,o,B.I),o,o,o,B.pU,B.O5,o,o,o)
 j=p.a4Q()
 s=A.bG(a,o,t.l).w
@@ -95114,7 +95114,7 @@ l.push(A.aFu(B.Q1,B.aec,o.ga7y(),A.aFv(n,n,n,n,n,n,n,n,n,n,n,B.HG,n,n,n,n,n,n,n,
 l.push(B.bN)
 l.push(A.aFu(B.PU,B.aea,o.gac1(),A.aFv(n,n,n,n,n,n,n,n,n,n,n,B.HG,n,n,n,n,n,n,n,n)))
 l.push(B.k7)
-l.push(A.dv(A.ay("\u0627\u0644\u0646\u0633\u062e\u0629 1.1.10",n,n,n,n,A.cb(n,n,B.b2,n,n,n,n,n,n,n,n,12,n,n,n,n,n,!0,n,n,n,n,n,n,n,n),n,n),n,n))
+l.push(A.dv(A.ay("\u0627\u0644\u0646\u0633\u062e\u0629 1.1.11",n,n,n,n,A.cb(n,n,B.b2,n,n,n,n,n,n,n,n,12,n,n,n,n,n,!0,n,n,n,n,n,n,n,n),n,n),n,n))
 l=A.acY(l,n,B.fH,B.al)}return A.qx(k,l,n,n)},
 D1(a,b,c){var s,r,q,p=null,o=t.N,n=A.as(["khalasOthers","\u064a\u064f\u0636\u0627\u0641 \u0644\u0644\u0628\u0627\u0642\u064a\u0646","khalasWinner","\u064a\u064f\u0646\u0642\u0635 \u0645\u0646 \u0627\u0644\u0645\u062e\u0644\u0635","khalasQuick1","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 1","khalasQuick2","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 2","dablOthers","\u064a\u064f\u0636\u0627\u0641 \u0644\u0644\u0628\u0627\u0642\u064a\u0646","dablWinner","\u064a\u064f\u0646\u0642\u0635 \u0645\u0646 \u0627\u0644\u0645\u062f\u0628\u0644","dablQuick1","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 1","dablQuick2","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 2","dablLonOthers","\u064a\u064f\u0636\u0627\u0641 \u0644\u0644\u0628\u0627\u0642\u064a\u0646","dablLonWinner","\u064a\u064f\u0646\u0642\u0635 \u0645\u0646 \u0645\u062f\u0628\u0644 \u0627\u0644\u0644\u0648\u0646","dablLonQuick1","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 1","dablLonQuick2","\u0627\u0644\u0632\u0631 \u0627\u0644\u0633\u0631\u064a\u0639 2"],o,o)
 o=this.d.h(0,b)
