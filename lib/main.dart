@@ -3884,7 +3884,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.13';
+const String kAppVersion = '1.1.14';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
