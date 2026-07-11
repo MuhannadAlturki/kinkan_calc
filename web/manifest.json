@@ -1,11 +1,11 @@
 {
-    "name": "حاسبة كنكان",
-    "short_name": "كنكان",
+    "name": "كنكنة",
+    "short_name": "كنكنة",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#1a1a2e",
     "theme_color": "#1a1a2e",
-    "description": "حاسبة نقاط لعبة كنكان",
+    "description": "حاسبة نقاط لعبة كنكنة",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

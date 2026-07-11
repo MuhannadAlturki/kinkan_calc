@@ -131,7 +131,7 @@ class KinkanApp extends StatelessWidget {
     valueListenable: themeNotifier,
     builder: (_, currentMode, __) => MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'حاسبة كنكان',
+      title: 'كنكنة',
       locale: const Locale('ar'),
       supportedLocales: const [Locale('ar')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
@@ -811,7 +811,7 @@ class _PlayerSetupScreenState extends State<PlayerSetupScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('حاسبة كنكان'),
+        title: const Text('كنكنة'),
         actions: [
           IconButton(
             tooltip: 'السجل',
@@ -2133,7 +2133,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       appBar: AppBar(
         title: Column(
           children: [
-            const Text('حاسبة كنكان'),
+            const Text('كنكنة'),
             Text(
               '⏱ ${_formatDuration(_elapsedSeconds)}',
               style: const TextStyle(
@@ -3603,7 +3603,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final dateStr =
         '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     final buffer = StringBuffer()
-      ..writeln('🎴 لعبة كنكان - $dateStr')
+      ..writeln('🎴 لعبة كنكنة - $dateStr')
       ..writeln('━━━━━━━━━━━━━━━━━━')
       ..writeln(g.completed
           ? '🏆 الفائزون: ${g.winners.join("، ")}'
@@ -3884,7 +3884,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.12';
+const String kAppVersion = '1.1.13';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -3961,7 +3961,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _exportData() async {
     final games = await SavedGames.load();
     final json = jsonEncode(games.map((g) => g.toJson()).toList());
-    await Share.share(json, subject: 'بيانات حاسبة كنكان');
+    await Share.share(json, subject: 'بيانات كنكنة');
   }
 
   Future<void> _importData() async {
@@ -4734,7 +4734,7 @@ class GameDetailScreen extends StatelessWidget {
             icon: const Icon(Icons.share_rounded),
             onPressed: () {
               final buffer = StringBuffer()
-                ..writeln('🎴 لعبة كنكان - $dateStr')
+                ..writeln('🎴 لعبة كنكنة - $dateStr')
                 ..writeln(record.completed
                     ? '🏆 الفائزون: ${record.winners.join("، ")}'
                     : '⏸ لعبة غير مكتملة');
