@@ -1,8 +1,8 @@
-name: Deploy Web App
+name: Deploy Web App (Staging)
 
 on:
   push:
-    branches: [master]
+    branches: [claude/remote-control-phone-ungd3f]
 
 permissions:
   contents: write
@@ -19,12 +19,13 @@ jobs:
           channel: stable
 
       - run: flutter pub get
-      - run: flutter build web --release --base-href /kinkan_calc/ --pwa-strategy=none
+      - run: flutter build web --release --base-href /kinkan_calc/beta/ --pwa-strategy=none --dart-define=IS_STAGING=true
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages (beta subfolder)
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: build/web
-          # لا نمسح مجلد /beta (النسخة التجريبية) عند نشر الإنتاج
+          destination_dir: beta
+          # لا نمسح باقي الموقع (نسخة الإنتاج) عند نشر البيئة التجريبية
           keep_files: true

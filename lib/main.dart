@@ -108,6 +108,10 @@ List<List<String>> rankTiers(Map<String, int> scores) {
   return tiers;
 }
 
+/// true فقط بنسخة الويب التجريبية (تُبنى بـ --dart-define=IS_STAGING=true)
+/// — تُظهر شريط تنبيه ثابت أعلى الشاشة حتى لا يُخلَط بينها وبين الإنتاج.
+const bool kIsStaging = bool.fromEnvironment('IS_STAGING');
+
 /*═══════════════════════════│ تشغيل التطبيق │═══════════════════════════*/
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -135,6 +139,31 @@ class KinkanApp extends StatelessWidget {
       theme: _buildTheme(Brightness.light),
       darkTheme: _buildTheme(Brightness.dark),
       home: const PlayerSetupScreen(),
+      builder: (context, child) {
+        if (!kIsStaging || child == null) return child ?? const SizedBox();
+        return Column(
+          children: [
+            SafeArea(
+              bottom: false,
+              child: Container(
+                width: double.infinity,
+                color: Colors.amber,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: const Text(
+                  '🧪 نسخة تجريبية للاختبار — مو الإنتاج',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+            Expanded(child: child),
+          ],
+        );
+      },
     ),
   );
 
@@ -3835,7 +3864,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.9';
+const String kAppVersion = '1.1.10';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
