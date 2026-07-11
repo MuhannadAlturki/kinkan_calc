@@ -1075,6 +1075,7 @@ class _PlayerSetupScreenState extends State<PlayerSetupScreen> {
                   foregroundColor: Colors.white,
                   minimumSize: const Size.fromHeight(56),
                   disabledBackgroundColor: Colors.grey.shade300,
+                  disabledForegroundColor: Colors.black54,
                 ),
                 icon: const Icon(Icons.play_arrow_rounded, size: 28),
                 label: Text(
@@ -3884,7 +3885,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.14';
+const String kAppVersion = '1.1.15';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
