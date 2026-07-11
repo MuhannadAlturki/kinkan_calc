@@ -1112,6 +1112,14 @@ class GameScreen extends StatefulWidget {
 }
 
 class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
+  // نملك قائمة اللاعبين بالكامل داخل الـ State (نسخة من widget.players
+  // تُهيّأ مرة وحدة بـinitState) بدل قراءتها مباشرة من widget في كل مكان.
+  // ثبت فعلياً (بتشخيص مرئي) أن Flutter يستبدل كائن widget.players بنسخة
+  // جديدة بنقاط صفرية عند الرجوع من الخلفية على الويب، بينما حقول الـ
+  // State (مثل _history ورقم الجولة) تبقى سليمة دائماً — فامتلاك قائمة
+  // اللاعبين كحقل State يجعلها محصّنة من نفس المشكلة.
+  late List<Player> _players;
+
   late int _limit;
   late int _winnersCount;
   int _roundNo = 1;
@@ -1152,7 +1160,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   int _recalcErrorCount = 0;
 
   /// تشخيصي مؤقت: مجموع نقاط working فور نجاح الحساب (قبل التطبيق على
-  /// widget.players)، ومجموع widget.players الفعلي بعد التطبيق — لو
+  /// _players)، ومجموع _players الفعلي بعد التطبيق — لو
   /// اختلفوا يعني المشكلة بخطوة "التطبيق"، ولو تساووا وصفر يعني المشكلة
   /// بخطوة "الجمع" نفسها رغم نجاحها الظاهري.
   int _lastWorkingSum = -1;
@@ -1161,7 +1169,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   /// تشخيصي مؤقت: آخر أحداث دورة حياة التطبيق (resumed/paused/...) بالترتيب.
   final List<String> _lifecycleLog = [];
 
-  /// تشخيصي مؤقت: هوية قائمة widget.players لحظة آخر تطبيق ناجح لـ
+  /// تشخيصي مؤقت: هوية قائمة _players لحظة آخر تطبيق ناجح لـ
   /// _recalcTotals — نقارنها بهوية القائمة الحالية وقت الرسم.
   int _lastAppliedListIdentity = 0;
 
@@ -1169,9 +1177,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   int _elapsedSeconds = 0;
   int _lastSavedHistoryLength = -1;
 
-  List<Player> get _active => widget.players.where((p) => !p.out).toList();
+  List<Player> get _active => _players.where((p) => !p.out).toList();
   List<String> get _playerNames =>
-      widget.players.map((p) => p.name).toList();
+      _players.map((p) => p.name).toList();
 
   int get _realRoundsCount =>
       _history.where((r) => !r.isEvent).length;
@@ -1180,10 +1188,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _players = List.of(widget.players);
     _limit = widget.limit;
     _winnersCount = widget.winnersCount;
     _elapsedSeconds = widget.initialDuration;
-    for (final p in widget.players) {
+    for (final p in _players) {
       _fields[p.name] = TextEditingController(text: '0');
       _previousScores[p.name] = 0;
     }
@@ -1294,11 +1303,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   void _recalcTotals({bool isInit = false}) {
     // نحسب على نسخ مؤقتة من اللاعبين، ولا نطبّق النتيجة على الحالة
-    // الحقيقية (widget.players) إلا بعد نجاح إعادة تشغيل السجل بالكامل.
+    // الحقيقية (_players) إلا بعد نجاح إعادة تشغيل السجل بالكامل.
     // هذا يمنع نصف حساب فاشل (استثناء غير متوقع) من ترك نقاط اللاعبين
     // مصفّرة نهائياً — لو صار خطأ، تبقى آخر نقاط صحيحة كما هي بدل ما
     // تنصفر بصمت (شفنا هذا يصير فعلياً عند الرجوع من الخلفية).
-    final working = widget.players.map((p) => p.clone()).toList();
+    final working = _players.map((p) => p.clone()).toList();
 
     List<String> stepSilent = [];
     List<String> stepWinners = [];
@@ -1358,15 +1367,15 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     _lastWorkingSum = working.fold(0, (a, p) => a + p.score);
 
     // نجاح كامل — الآن فقط نطبّق النتائج على اللاعبين الحقيقيين
-    for (final p in widget.players) {
+    for (final p in _players) {
       _previousScores[p.name] = p.score;
       final w = working.firstWhere((x) => x.name == p.name, orElse: () => p);
       p.score = w.score;
       p.out = w.out;
     }
 
-    _lastAppliedSum = widget.players.fold(0, (a, p) => a + p.score);
-    _lastAppliedListIdentity = identityHashCode(widget.players);
+    _lastAppliedSum = _players.fold(0, (a, p) => a + p.score);
+    _lastAppliedListIdentity = identityHashCode(_players);
 
     final hasRealRound = _history.any((r) => !r.isEvent);
 
@@ -1397,7 +1406,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   Future<void> _saveDraft() async {
     await DraftGameManager.save(DraftGame(
-      players: widget.players.map((p) => p.name).toList(),
+      players: _players.map((p) => p.name).toList(),
       limit: _limit,
       rounds: List.of(_history),
       durationSeconds: _elapsedSeconds,
@@ -1533,7 +1542,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   List<String> _sortByCircularOrder(
       List<String> playersToSort, String lastWinnerName) {
-    List<String> originalOrder = widget.players.map((p) => p.name).toList();
+    List<String> originalOrder = _players.map((p) => p.name).toList();
     int startIndex = 0;
     if (lastWinnerName.isNotEmpty) {
       int wIdx = originalOrder.indexOf(lastWinnerName);
@@ -1562,7 +1571,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   void _showCongrats() async {
     HapticFeedback.heavyImpact();
-    final winnersToShow = widget.players
+    final winnersToShow = _players
         .where((p) => _finalWinners.contains(p.name))
         .toList();
     winnersToShow.sort((a, b) => a.score.compareTo(b.score));
@@ -1733,14 +1742,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       setState(() {
         final last = _history.removeLast();
         if (last.isPlayerAddition) {
-          widget.players
+          _players
               .removeWhere((p) => last.addedPlayers.contains(p.name));
           for (final n in last.addedPlayers) {
             _fields.remove(n);
           }
         } else if (last.isPlayerRemoval) {
           for (final n in last.removedPlayers) {
-            widget.players.add(Player(n));
+            _players.add(Player(n));
             _fields[n] = TextEditingController(text: '0');
             _previousScores[n] = 0;
           }
@@ -1851,10 +1860,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     final record = GameRecord(
       id: widget.existingRecordId ?? const Uuid().v4(),
       date: DateTime.now(),
-      players: widget.players.map((p) => p.name).toList(),
+      players: _players.map((p) => p.name).toList(),
       limit: _limit,
       rounds: List.of(_history),
-      finalScores: {for (final p in widget.players) p.name: p.score},
+      finalScores: {for (final p in _players) p.name: p.score},
       durationSeconds: _elapsedSeconds,
       winnersCount: _winnersCount,
       completed: _gameEnded,
@@ -1966,7 +1975,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => _EditPlayersSheet(
-        players: widget.players.map((p) => p.name).toList(),
+        players: _players.map((p) => p.name).toList(),
         onSave: (renames, newPlayers, finalOrder) {
           _applyPlayerEdits(renames, newPlayers, finalOrder);
         },
@@ -1985,11 +1994,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
         if (oldName == newName) continue;
 
         final playerIdx =
-        widget.players.indexWhere((p) => p.name == oldName);
+        _players.indexWhere((p) => p.name == oldName);
         if (playerIdx == -1) continue;
 
-        final oldPlayer = widget.players[playerIdx];
-        widget.players[playerIdx] = Player(newName)
+        final oldPlayer = _players[playerIdx];
+        _players[playerIdx] = Player(newName)
           ..score = oldPlayer.score
           ..out = oldPlayer.out;
 
@@ -2014,13 +2023,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     }
 
     // Remove players deleted in the sheet (post-rename names not in finalOrder)
-    final removedNames = widget.players
+    final removedNames = _players
         .map((p) => p.name)
         .where((n) => !finalOrder.contains(n))
         .toList();
     if (removedNames.isNotEmpty) {
       for (final name in removedNames) {
-        widget.players.removeWhere((p) => p.name == name);
+        _players.removeWhere((p) => p.name == name);
         _fields.remove(name)?.dispose();
         _previousScores.remove(name);
       }
@@ -2036,13 +2045,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
     if (newPlayers.isNotEmpty) {
       int maxScore = 0;
-      for (final p in widget.players) {
+      for (final p in _players) {
         if (p.score > maxScore) maxScore = p.score;
       }
       final startingScore = maxScore > 0 ? maxScore + 1 : 0;
 
       for (final name in newPlayers) {
-        widget.players.add(Player(name));
+        _players.add(Player(name));
         _fields[name] = TextEditingController(text: '0');
         _previousScores[name] = 0;
         SavedNames.add(name);
@@ -2059,18 +2068,18 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       _history.add(additionEntry);
     }
 
-    // Reorder widget.players to match the order the user set in the sheet.
+    // Reorder _players to match the order the user set in the sheet.
     // finalOrder contains new names (post-rename) for existing players + new players.
     if (finalOrder.isNotEmpty) {
       final nameToPlayer = <String, Player>{
-        for (final p in widget.players) p.name: p
+        for (final p in _players) p.name: p
       };
       final reordered = finalOrder
           .map((n) => nameToPlayer[n])
           .whereType<Player>()
           .toList();
-      if (reordered.length == widget.players.length) {
-        widget.players
+      if (reordered.length == _players.length) {
+        _players
           ..clear()
           ..addAll(reordered);
       }
@@ -2087,7 +2096,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       MaterialPageRoute(
         builder: (_) => RoundsHistoryScreen(
           history: _history,
-          allPlayers: widget.players.map((p) => p.name).toList(),
+          allPlayers: _players.map((p) => p.name).toList(),
           onEditRound: (r) {
             Navigator.pop(context);
             _editRound(r);
@@ -2189,11 +2198,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                           fontSize: 10,
                           color: Theme.of(context).colorScheme.outline),
                     ),
-                    // تشخيصي: قراءة حيّة لنقاط widget.players وهوياتها
+                    // تشخيصي: قراءة حيّة لنقاط _players وهوياتها
                     // بالضبط لحظة هذا الرسم — نقارنها بـ"تطبيق" أعلاه.
                     Text(
-                      'حيّ: ${widget.players.map((p) => '${p.name}:${p.score}').join(' ')} '
-                      '| هوية-رسم:${identityHashCode(widget.players)} '
+                      'حيّ: ${_players.map((p) => '${p.name}:${p.score}').join(' ')} '
+                      '| هوية-رسم:${identityHashCode(_players)} '
                       'هوية-تطبيق:$_lastAppliedListIdentity',
                       style: TextStyle(
                           fontSize: 9,
@@ -2595,7 +2604,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           Wrap(
             spacing: 6,
             runSpacing: 6,
-            children: widget.players.map((p) {
+            children: _players.map((p) {
               return Container(
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 4),
@@ -3889,7 +3898,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.7';
+const String kAppVersion = '1.1.8';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
