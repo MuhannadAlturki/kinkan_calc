@@ -94071,11 +94071,11 @@ s=A.bn(14)
 r=A.a([A.bL(A.a([B.Qb,B.aY,A.ay("\u0627\u0644\u062c\u0648\u0644\u0629 "+p.r,o,o,o,o,B.aaD,o,o)],n),B.r,B.n,B.t)],n)
 if(p.ay.length!==0||p.ch.length!==0){k=A.a([],n)
 q=p.ch
-if(q.length!==0)k.push(p.D2(B.es,B.bK,"\u0627\u0644\u0623\u0648\u0644",B.b.bK(q,"\u060c ")))
+if(q.length!==0)k.push(p.D2(B.es,B.bK,"\u0627\u0644\u0623\u0648\u0644",B.b.bK(q," | ")))
 q=p.CW
-if(q.length!==0)k.push(p.D2(B.et,B.bK,"\u0627\u0644\u062b\u0627\u0646\u064a",B.b.bK(q,"\u060c ")))
+if(q.length!==0)k.push(p.D2(B.et,B.bK,"\u0627\u0644\u062b\u0627\u0646\u064a",B.b.bK(q," | ")))
 q=p.ay
-if(q.length!==0)k.push(p.D2(B.aN,B.Pt,"\ud83c\udccf \u0627\u0644\u0645\u0648\u0632\u0651\u0639\u0648\u0646",B.b.bK(q,"\u060c ")))
+if(q.length!==0)k.push(p.D2(B.aN,B.Pt,"\ud83c\udccf \u0627\u0644\u0645\u0648\u0632\u0651\u0639\u0648\u0646",B.b.bK(q," | ")))
 B.b.T(r,A.a([B.bN,A.rc(k,B.du,6,6)],n))}k=A.bz(o,A.c_(r,B.aE,B.n,B.t),B.p,o,o,new A.bd(j,o,o,s,o,o,B.I),o,o,o,B.pU,B.O5,o,o,o)
 j=p.a4Q()
 s=A.bG(a,o,t.l).w
