@@ -2184,21 +2184,21 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             _buildRankChip(
                               icon: Icons.emoji_events_rounded,
                               label: 'الأول',
-                              names: _currentWinners.join('، '),
+                              names: _currentWinners.join(' | '),
                               color: AppColors.gold,
                             ),
                           if (_secondPlace.isNotEmpty)
                             _buildRankChip(
                               icon: Icons.emoji_events_rounded,
                               label: 'الثاني',
-                              names: _secondPlace.join('، '),
+                              names: _secondPlace.join(' | '),
                               color: AppColors.silver,
                             ),
                           if (_silentPlayers.isNotEmpty)
                             _buildRankChip(
                               icon: Icons.volume_off_rounded,
                               label: '🃏 الموزّعون',
-                              names: _silentPlayers.join('، '),
+                              names: _silentPlayers.join(' | '),
                               color: AppColors.danger,
                             ),
                         ],
