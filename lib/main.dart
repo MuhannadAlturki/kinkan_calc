@@ -2180,13 +2180,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         spacing: 6,
                         runSpacing: 6,
                         children: [
-                          if (_silentPlayers.isNotEmpty)
-                            _buildRankChip(
-                              icon: Icons.volume_off_rounded,
-                              label: '🃏 الموزّعون',
-                              names: _silentPlayers.join('، '),
-                              color: AppColors.danger,
-                            ),
                           if (_currentWinners.isNotEmpty)
                             _buildRankChip(
                               icon: Icons.emoji_events_rounded,
@@ -2200,6 +2193,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                               label: 'الثاني',
                               names: _secondPlace.join('، '),
                               color: AppColors.silver,
+                            ),
+                          if (_silentPlayers.isNotEmpty)
+                            _buildRankChip(
+                              icon: Icons.volume_off_rounded,
+                              label: '🃏 الموزّعون',
+                              names: _silentPlayers.join('، '),
+                              color: AppColors.danger,
                             ),
                         ],
                       ),
@@ -3864,7 +3864,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.10';
+const String kAppVersion = '1.1.11';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
