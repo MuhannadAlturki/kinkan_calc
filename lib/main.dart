@@ -509,6 +509,7 @@ class AppSettings {
     'dablLonQuick1': 25, 'dablLonQuick2': 100,
     'khalasEnabled': 1,  'dablEnabled': 1, 'dablLonEnabled': 1,
     'winnersCount': 2,
+    'newPlayerScoreOffset': 1,
   };
 
   static Future<Map<String, int>> load() async {
@@ -1163,6 +1164,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     'dablLonQuick1': 25, 'dablLonQuick2': 100,
     'khalasEnabled': 1,  'dablEnabled': 1, 'dablLonEnabled': 1,
     'winnersCount': 2,
+    'newPlayerScoreOffset': 1,
   };
 
   final Map<String, TextEditingController> _fields = {};
@@ -1317,7 +1319,12 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
     List<String> stepSilent = [];
     List<String> stepWinners = [];
+    List<String> stepSecond = [];
     final Set<String> outNames = {};
+    // لاعبون أُضيفوا منتصف اللعبة ولم تُسجَّل لهم أي جولة حقيقية بعد —
+    // يُستثنون من شارات الأول/الثاني/الموزّعون لحد ما تُسجَّل أول جولة
+    // تشملهم، حتى لو نقطة بدايتهم صادفت كونها الأعلى أو الأدنى حالياً.
+    final Set<String> pendingNewcomers = {};
     bool ended = false;
     List<String> finalWinners = [];
 
@@ -1332,7 +1339,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           if (player.name.isNotEmpty) player.score += v;
         });
 
-        if (r.isEvent) continue;
+        if (r.isEvent) {
+          if (r.isPlayerAddition) pendingNewcomers.addAll(r.addedPlayers);
+          continue;
+        }
 
         // تقييم قاعدة نهاية اللعبة على من لم يخرج بعد
         final eval = _evaluateEnd(
@@ -1345,14 +1355,26 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           p.out = outNames.contains(p.name);
         }
 
+        final eligibleActive = working
+            .where((p) => !p.out && !pendingNewcomers.contains(p.name))
+            .toList();
+
         final roles = _computeRoles(
-          activePlayers: working.where((p) => !p.out).toList(),
+          activePlayers: eligibleActive,
           previousSilent: stepSilent,
           lastWinner: r.winner.split(',').first.trim(),
           historySubset: _history.sublist(0, i + 1),
         );
         stepSilent = roles.silent;
         stepWinners = roles.winners;
+        stepSecond = rankTiers({for (final p in eligibleActive) p.name: p.score})
+            .skip(1)
+            .take(1)
+            .expand((tier) => tier)
+            .toList();
+
+        // هذي الجولة سُجِّلت الآن وتشملهم — صاروا مؤهلين من الجولة الجاية.
+        pendingNewcomers.clear();
       }
     } catch (e, st) {
       debugPrint('kinkan: _recalcTotals فشلت، تم تجاهل النتيجة والاحتفاظ '
@@ -1375,11 +1397,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     // الفضي يظهر فقط إذا كان عدد المتصدرين (الذهبي) أقل من عدد الفائزين،
     // حتى لا يوحي العرض بعدد فائزين أكبر من المحدد للعبة.
     _secondPlace = hasRealRound && stepWinners.length < _winnersCount
-        ? rankTiers({for (final p in _active) p.name: p.score})
-        .skip(1)
-        .take(1)
-        .expand((tier) => tier)
-        .toList()
+        ? stepSecond
         : [];
 
     _gameEnded = ended;
@@ -2039,7 +2057,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       for (final p in _players) {
         if (p.score > maxScore) maxScore = p.score;
       }
-      final startingScore = maxScore > 0 ? maxScore + 1 : 0;
+      final scoreOffset = _settings['newPlayerScoreOffset'] ?? 1;
+      final startingScore = maxScore > 0 ? maxScore + scoreOffset : 0;
 
       for (final name in newPlayers) {
         _players.add(Player(name));
@@ -2196,7 +2215,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                             ),
                           if (_silentPlayers.isNotEmpty)
                             _buildRankChip(
-                              icon: Icons.volume_off_rounded,
                               label: '🃏 الموزّعون',
                               names: _silentPlayers.join(' | '),
                               color: AppColors.danger,
@@ -2504,7 +2522,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildRankChip({
-    required IconData icon,
+    IconData? icon,
     required String names,
     required Color color,
     String? label,
@@ -2519,8 +2537,10 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: color),
-          const SizedBox(width: 4),
+          if (icon != null) ...[
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 4),
+          ],
           if (label != null) ...[
             Text(
               '$label: ',
@@ -2824,7 +2844,7 @@ class _RoundDetailCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    const Icon(Icons.arrow_back_rounded,
+                    const Icon(Icons.arrow_forward_rounded,
                         size: 22, color: AppColors.primary),
                     const SizedBox(width: 6),
                     Text(
@@ -3864,7 +3884,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.11';
+const String kAppVersion = '1.1.12';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -3890,6 +3910,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ('dablLonQuick1', 'الزر السريع 1 — دبل لون'),
     ('dablLonQuick2', 'الزر السريع 2 — دبل لون'),
     ('winnersCount', 'عدد الفائزين'),
+    ('newPlayerScoreOffset', 'نقاط اللاعب المضاف لاحقًا'),
   ];
 
   late final Map<String, TextEditingController> _ctrls;
@@ -3920,6 +3941,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     // عدد الفائزين لا يقل عن 1
     if ((updated['winnersCount'] ?? 2) < 1) updated['winnersCount'] = 1;
+    // نقاط اللاعب المضاف لاحقًا لا تقل عن 0
+    if ((updated['newPlayerScoreOffset'] ?? 1) < 0) {
+      updated['newPlayerScoreOffset'] = 0;
+    }
     // مفاتيح تفعيل الأنواع (ليست حقولاً نصية)
     for (final k in ['khalasEnabled', 'dablEnabled', 'dablLonEnabled']) {
       updated[k] = _settings[k] ?? 1;
@@ -4043,6 +4068,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   horizontal: 8, vertical: 10),
                             ),
                           ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.person_add_alt_1_rounded,
+                                color: AppColors.accent),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text('نقاط اللاعب المضاف لاحقًا',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15)),
+                            ),
+                            SizedBox(
+                              width: 80,
+                              child: TextField(
+                                controller:
+                                    _ctrls['newPlayerScoreOffset'],
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                decoration: const InputDecoration(
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 10),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'إذا أضفت لاعبًا في منتصف اللعبة، يبدأ بنقاط '
+                          'أعلى لاعب حالي + هذا الرقم — حتى ما يبدأ من '
+                          'صفر ويصير بموقف أفضل من بقية اللاعبين.',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600),
                         ),
                       ],
                     ),
