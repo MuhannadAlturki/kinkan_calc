@@ -653,12 +653,15 @@ class _PlayerSetupScreenState extends State<PlayerSetupScreen> {
   final List<Player> _players = [];
   List<String> _savedNames = [];
   List<PlayerGroup> _groups = [];
+  int _winnersCount = 2;
 
   @override
   void initState() {
     super.initState();
     SavedNames.load().then((v) => setState(() => _savedNames = v));
     SavedGroups.load().then((v) => setState(() => _groups = v));
+    AppSettings.load()
+        .then((s) => setState(() => _winnersCount = s['winnersCount'] ?? 2));
     DraftGameManager.load().then((draft) {
       if (draft != null && mounted) {
         WidgetsBinding.instance
@@ -766,7 +769,7 @@ class _PlayerSetupScreenState extends State<PlayerSetupScreen> {
   }
 
   Future<void> _start() async {
-    if (_players.length < 2) return;
+    if (_players.length <= _winnersCount) return;
     final settings = await AppSettings.load();
     final winnersCount = settings['winnersCount'] ?? 2;
     if (!mounted) return;
@@ -1069,7 +1072,7 @@ class _PlayerSetupScreenState extends State<PlayerSetupScreen> {
                   ),
                 ),
               ElevatedButton.icon(
-                onPressed: _players.length < 2 ? null : _start,
+                onPressed: _players.length <= _winnersCount ? null : _start,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -1079,8 +1082,8 @@ class _PlayerSetupScreenState extends State<PlayerSetupScreen> {
                 ),
                 icon: const Icon(Icons.play_arrow_rounded, size: 28),
                 label: Text(
-                  _players.length < 2
-                      ? 'أضف لاعبين على الأقل 2'
+                  _players.length <= _winnersCount
+                      ? 'أضف لاعبين على الأقل ${_winnersCount + 1}'
                       : 'ابدأ اللعبة',
                   style: const TextStyle(
                       fontSize: 18, fontWeight: FontWeight.bold),
@@ -3885,7 +3888,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /*═══════════════════════════│ الإعدادات │═══════════════════════════*/
-const String kAppVersion = '1.1.15';
+const String kAppVersion = '1.1.16';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
